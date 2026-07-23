@@ -1,18 +1,19 @@
 /**
  * API origin for SoftPOS.
- * Priority: localStorage (runtime) → VITE_API_BASE (build) → same-origin (Docker).
- * On GitHub Pages set e.g. localStorage.pos_api_base = 'https://your-api.example.com'
- * or workflow secret VITE_API_BASE.
+ * Default: same-origin (empty) — open UI at http://127.0.0.1:8001 so only email/password.
+ * Optional override: VITE_API_BASE at build, or localStorage.pos_api_base.
  */
 function resolveApiBase(): string {
   try {
     const saved = localStorage.getItem('pos_api_base')
     if (saved) return saved.replace(/\/$/, '')
   } catch {
-    /* ignore SSR / private mode */
+    /* ignore */
   }
   const env = (import.meta.env.VITE_API_BASE as string | undefined)?.trim()
-  return env ? env.replace(/\/$/, '') : ''
+  if (env) return env.replace(/\/$/, '')
+  // Same host as the page (Docker SPA at :8001) — no API URL needed
+  return ''
 }
 
 export function getApiBase() {
@@ -23,6 +24,15 @@ export function setApiBase(url: string) {
   const cleaned = url.trim().replace(/\/$/, '')
   if (cleaned) localStorage.setItem('pos_api_base', cleaned)
   else localStorage.removeItem('pos_api_base')
+}
+
+/** Clear wrong API override so login uses same-origin again. */
+export function clearApiBase() {
+  try {
+    localStorage.removeItem('pos_api_base')
+  } catch {
+    /* ignore */
+  }
 }
 
 export type Product = {
