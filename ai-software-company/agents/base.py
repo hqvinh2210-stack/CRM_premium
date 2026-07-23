@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from agents.llm import get_chat_model
+from agents.llm import active_model_name, get_chat_model
 from agents.roles import AgentRole
 from config.settings import get_settings
 
@@ -28,6 +28,7 @@ class BaseAgent:
         llm = None if settings.force_offline else get_chat_model()
 
         if llm is not None:
+            model = active_model_name()
             try:
                 content = self._run_llm(llm, user_message)
                 return AgentResult(
@@ -35,7 +36,7 @@ class BaseAgent:
                     agent_name=self.role.name,
                     content=content,
                     mode="llm",
-                    model=settings.xai_model,
+                    model=model,
                 )
             except Exception as exc:
                 # No credits / network / model errors → offline fallback
@@ -51,7 +52,7 @@ class BaseAgent:
                     agent_name=self.role.name,
                     content=content,
                     mode="llm_fallback",
-                    model=settings.xai_model,
+                    model=model,
                 )
 
         if not settings.allow_offline:

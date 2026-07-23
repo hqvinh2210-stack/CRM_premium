@@ -48,3 +48,13 @@ def enqueue_event_hint(event_type: str, payload: dict) -> dict:
         "event_type": event_type,
         "payload_keys": list(payload.keys()),
     }
+
+
+@celery_app.task(name="workers.tasks.run_pos_agent_event")
+def run_pos_agent_event(event_type: str, payload: dict) -> dict:
+    """Async Ava→Rex→Kai review for POS order events (P3-M4-T4)."""
+    from pos.services.ai_events import run_agent_for_pos_event
+
+    result = run_agent_for_pos_event(event_type, payload)
+    result["via"] = "celery"
+    return result

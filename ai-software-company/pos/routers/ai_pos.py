@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from pos.db import get_db
 from pos.deps import AuthContext, require_any
+from pos.services.ai_events import queue_or_run_agent
 from pos.services.recommend import recommend_products
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+class PosAgentEventIn(BaseModel):
+    event_type: str = Field(default="order.created", min_length=1)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    sync: bool = False
 
 
 @router.get("/recommend")
@@ -51,3 +61,21 @@ def coach(
         "message": rec.get("next_best_action") or "Chưa đủ dữ liệu — bán theo catalog.",
         "recommendations": rec["items"],
     }
+
+
+@router.post("/event")
+def pos_agent_event(
+    body: PosAgentEventIn,
+    ctx: AuthContext = Depends(require_any("manager", "admin", "cashier")),
+):
+    """
+    Manually or post-pay: run agents on a POS domain event (P3-M4-T4).
+    Cashier can trigger coach analysis; workers also call this path via outbox.
+    """
+    payload = dict(body.payload or {})
+    payload.setdefault("store_id", ctx.store_id)
+    if body.sync:
+        from pos.services.ai_events import run_agent_for_pos_event
+
+        return run_agent_for_pos_event(body.event_type, payload)
+    return queue_or_run_agent(body.event_type, payload)

@@ -14,8 +14,9 @@ createRoot(document.getElementById('root')!).render(
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js').catch(() => {
-      /* ignore SW errors in dev */
+    const swUrl = `${import.meta.env.BASE_URL}sw.js`.replace(/\/{2,}/g, '/')
+    void navigator.serviceWorker.register(swUrl).catch(() => {
+      /* ignore SW errors in dev / GH Pages */
     })
   })
 }

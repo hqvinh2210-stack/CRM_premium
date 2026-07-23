@@ -2,7 +2,8 @@
   "name": "CRM Premium POS",
   "short_name": "POS",
   "description": "SoftPOS + CRM for multi-store retail",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#020617",
   "theme_color": "#4f46e5",
@@ -10,7 +11,7 @@
   "lang": "vi",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "./favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

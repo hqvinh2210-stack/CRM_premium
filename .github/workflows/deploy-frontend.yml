@@ -1,0 +1,58 @@
+name: Deploy Frontend (GitHub Pages)
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "ai-software-company/web/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-software-company/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ai-software-company/web/package-lock.json
+
+      - name: Install & build
+        env:
+          # Project Pages: https://<owner>.github.io/CRM_premium/
+          VITE_BASE: /CRM_premium/
+          # Optional public API origin (Settings → Secrets and variables → Actions)
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ai-software-company/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Customer, type Order, type OrderLine, type Product } from '../lib/api'
-import { isOnline } from '../lib/offline'
+import {
+  isOnline,
+  listOfflineOrders,
+  syncOfflineOrders,
+  type SyncResultRow,
+} from '../lib/offline'
 import { useAppNav } from '../store/app'
 import { useAuth } from '../store/auth'
 import { CartPanel } from './CartPanel'
@@ -47,6 +52,9 @@ export function PosApp() {
   const [receipt, setReceipt] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [discount, setDiscount] = useState(0)
+  const [offlineCount, setOfflineCount] = useState(0)
+  const [conflicts, setConflicts] = useState<SyncResultRow[]>([])
+  const [syncMsg, setSyncMsg] = useState('')
 
   // CRM → POS: preselect customer
   useEffect(() => {
@@ -54,6 +62,42 @@ export function PosApp() {
       setCustomer(posCustomer)
     }
   }, [posCustomer])
+
+  const refreshOffline = useCallback(async () => {
+    try {
+      const rows = await listOfflineOrders()
+      setOfflineCount(rows.length)
+    } catch {
+      setOfflineCount(0)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshOffline()
+    const onOnline = () => void refreshOffline()
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [refreshOffline])
+
+  async function handleSyncOffline() {
+    if (!token || !storeId) return
+    setSyncMsg('Đang sync offline…')
+    setConflicts([])
+    try {
+      const r = await syncOfflineOrders(token, storeId)
+      setConflicts(r.conflicts)
+      setOfflineCount(r.pending_left)
+      if (r.conflicts.length) {
+        setSyncMsg(
+          `Sync xong: ${r.results.filter((x) => x.ok).length} OK, ${r.conflicts.length} conflict (server price / stock) — cần xử lý tay.`,
+        )
+      } else {
+        setSyncMsg(r.ok ? 'Sync offline thành công.' : 'Sync một phần thất bại.')
+      }
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? e.message : 'Sync failed')
+    }
+  }
 
   const addProduct = useCallback(
     async (p: Product) => {
@@ -95,6 +139,36 @@ export function PosApp() {
 
   return (
     <div className="h-full flex flex-col min-h-0">
+      {(offlineCount > 0 || conflicts.length > 0 || syncMsg) && (
+        <div className="px-4 py-2 border-b border-amber-400/30 bg-amber-500/10 text-sm space-y-1">
+          <div className="flex flex-wrap items-center gap-2 text-amber-100">
+            <span>
+              Offline queue: <strong>{offlineCount}</strong>
+              {!isOnline() ? ' · đang offline' : ''}
+            </span>
+            {isOnline() && offlineCount > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleSyncOffline()}
+                className="rounded-lg bg-amber-500/30 border border-amber-300/40 px-2 py-1 text-xs"
+              >
+                Sync ngay
+              </button>
+            )}
+            {syncMsg && <span className="text-amber-50/90 text-xs">{syncMsg}</span>}
+          </div>
+          {conflicts.length > 0 && (
+            <ul className="text-xs text-rose-200 list-disc pl-4">
+              {conflicts.map((c) => (
+                <li key={c.client_id}>
+                  {c.client_id.slice(0, 8)}… · {c.error || c.status} · resolution=
+                  {c.resolution || 'manual_resolve'}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {customer && (
         <div className="px-4 py-2 border-b border-emerald-400/20 bg-emerald-500/10 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-emerald-200">

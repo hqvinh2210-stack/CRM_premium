@@ -91,6 +91,42 @@ MEM0_USE_REMOTE=0
 
 GitHub Actions (`.github/workflows/ci.yml`) chạy review + pytest trên mỗi push `main`.
 
+## 5b. Deploy Frontend → GitHub Pages
+
+Workflow: `.github/workflows/deploy-frontend.yml` (build `ai-software-company/web` → Pages).
+
+### Bật Pages (một lần)
+
+1. Repo **Settings → Pages**
+2. **Source:** GitHub Actions
+3. (Optional) **Settings → Secrets and variables → Actions → Variables**
+   - `VITE_API_BASE` = URL API public, ví dụ `https://your-vps:8001`  
+     (để trống cũng được — nhập API URL trên màn Login)
+
+### URL sau khi deploy
+
+```text
+https://hqvinh2210-stack.github.io/CRM_premium/
+```
+
+### Backend khi dùng Pages
+
+GitHub Pages **chỉ host SPA** (static). API vẫn chạy Docker/local/VPS.
+
+```powershell
+# API local (Docker)
+cd ai-software-company
+docker compose -f docker-compose.prod.yml up -d
+
+# CORS cho Pages (thêm vào .env rồi recreate api)
+CORS_ORIGINS=https://hqvinh2210-stack.github.io
+PUBLIC_BASE_URL=http://127.0.0.1:8001
+```
+
+Trên màn Login → **Hiện API server** → gõ `http://127.0.0.1:8001` (máy local) hoặc URL VPS public.
+
+> Ghi chú: trình duyệt trên điện thoại **không** gọi được `127.0.0.1` của máy dev — cần API public (tunnel/VPS).
+
 ## 6. Checklist production
 
 - [ ] Đổi mật khẩu demo / tắt seed admin yếu

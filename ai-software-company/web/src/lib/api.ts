@@ -1,4 +1,29 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+/**
+ * API origin for SoftPOS.
+ * Priority: localStorage (runtime) → VITE_API_BASE (build) → same-origin (Docker).
+ * On GitHub Pages set e.g. localStorage.pos_api_base = 'https://your-api.example.com'
+ * or workflow secret VITE_API_BASE.
+ */
+function resolveApiBase(): string {
+  try {
+    const saved = localStorage.getItem('pos_api_base')
+    if (saved) return saved.replace(/\/$/, '')
+  } catch {
+    /* ignore SSR / private mode */
+  }
+  const env = (import.meta.env.VITE_API_BASE as string | undefined)?.trim()
+  return env ? env.replace(/\/$/, '') : ''
+}
+
+export function getApiBase() {
+  return resolveApiBase()
+}
+
+export function setApiBase(url: string) {
+  const cleaned = url.trim().replace(/\/$/, '')
+  if (cleaned) localStorage.setItem('pos_api_base', cleaned)
+  else localStorage.removeItem('pos_api_base')
+}
 
 export type Product = {
   id: string
@@ -75,7 +100,8 @@ async function request<T>(
   if (options.token) headers.Authorization = `Bearer ${options.token}`
   if (options.storeId) headers['X-Store-Id'] = options.storeId
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const base = resolveApiBase()
+  const res = await fetch(`${base}${path}`, {
     ...options,
     headers,
   })
@@ -436,7 +462,28 @@ export const api = {
     })
   },
   exportCsvUrl(days = 7) {
-    return `/api/v1/reports/export.csv?days=${days}`
+    return `${resolveApiBase()}/api/v1/reports/export.csv?days=${days}`
+  },
+  exportPdfUrl(date?: string) {
+    const q = date ? `?date=${date}` : ''
+    return `${resolveApiBase()}/api/v1/reports/export.pdf${q}`
+  },
+  posAgentEvent(
+    token: string,
+    storeId: string,
+    event_type: string,
+    payload: Record<string, unknown>,
+    sync = false,
+  ) {
+    return request<{ ok?: boolean; queued?: boolean; status?: string; skipped?: boolean }>(
+      '/api/v1/ai/event',
+      {
+        method: 'POST',
+        token,
+        storeId,
+        body: JSON.stringify({ event_type, payload, sync }),
+      },
+    )
   },
 }
 

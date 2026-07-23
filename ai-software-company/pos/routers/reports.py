@@ -292,20 +292,13 @@ def export_sales_csv(
     )
 
 
-@router.get("/export.txt")
-def export_sales_txt(
-    report_date: date | None = Query(default=None, alias="date"),
-    ctx: AuthContext = Depends(require_any("manager", "admin", "cashier")),
-    db: Session = Depends(get_db),
-):
-    """Printable end-of-day text report (PDF-ready plain text)."""
-    day = report_date or date.today()
+def _eod_lines(db: Session, store_id: str, day: date) -> tuple[list[str], Decimal, int]:
     start = datetime.combine(day, time.min)
     end = datetime.combine(day, time.max)
     orders = (
         db.query(Order)
         .filter(
-            Order.store_id == ctx.store_id,
+            Order.store_id == store_id,
             Order.status == OrderStatus.paid,
             Order.paid_at >= start,
             Order.paid_at <= end,
@@ -316,14 +309,48 @@ def export_sales_txt(
     lines = [
         "===== BAO CAO CUOI NGAY =====",
         f"Ngay: {day.isoformat()}",
-        f"Store: {ctx.store_id}",
+        f"Store: {store_id}",
         f"So don: {len(orders)}",
         f"Doanh thu net: {net}",
-        "----------------------------",
+        "----- Chi tiet -----",
     ]
-    for o in orders[:100]:
-        lines.append(f"{(o.paid_at or o.created_at)} | {o.id[:8]} | {o.total}")
-    lines.append("============================")
+    for o in orders[:80]:
+        lines.append(
+            f"{o.id[:8]}  {o.total}  {(o.paid_at.isoformat() if o.paid_at else '')[:19]}"
+        )
+    lines.append("===== HET =====")
+    return lines, net, len(orders)
+
+
+@router.get("/export.txt")
+def export_sales_txt(
+    report_date: date | None = Query(default=None, alias="date"),
+    ctx: AuthContext = Depends(require_any("manager", "admin", "cashier")),
+    db: Session = Depends(get_db),
+):
+    """Printable end-of-day text report (PDF-ready plain text)."""
+    day = report_date or date.today()
+    lines, _net, _n = _eod_lines(db, ctx.store_id, day)
     return PlainTextResponse("\n".join(lines), media_type="text/plain; charset=utf-8")
+
+
+@router.get("/export.pdf")
+def export_sales_pdf(
+    report_date: date | None = Query(default=None, alias="date"),
+    ctx: AuthContext = Depends(require_any("manager", "admin")),
+    db: Session = Depends(get_db),
+):
+    """EOD PDF export (P4-M6) — minimal PDF without third-party libs."""
+    from pos.services.pdf_report import text_report_to_pdf
+
+    day = report_date or date.today()
+    lines, _net, _n = _eod_lines(db, ctx.store_id, day)
+    pdf = text_report_to_pdf(lines, title=f"EOD {day.isoformat()}")
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="eod_{day.isoformat()}.pdf"'},
+    )
+
 
 

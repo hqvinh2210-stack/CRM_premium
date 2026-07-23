@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, money, type Product } from '../lib/api'
 import { useAuth } from '../store/auth'
 
@@ -9,6 +9,9 @@ export function ProductGrid({ onAdd }: { onAdd: (p: Product) => void }) {
   const [barcode, setBarcode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [camOn, setCamOn] = useState(false)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
 
   async function load(search?: string) {
     if (!token || !storeId) return
@@ -44,6 +47,38 @@ export function ProductGrid({ onAdd }: { onAdd: (p: Product) => void }) {
     }
   }
 
+  async function toggleCamera() {
+    if (camOn) {
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+      setCamOn(false)
+      return
+    }
+    try {
+      // SoftPOS PWA: camera as barcode assist (manual confirm via input)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      })
+      streamRef.current = stream
+      setCamOn(true)
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          void videoRef.current.play()
+        }
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không mở được camera')
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+    }
+  }, [])
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="p-3 flex flex-wrap gap-2 border-b border-white/10">
@@ -67,7 +102,28 @@ export function ProductGrid({ onAdd }: { onAdd: (p: Product) => void }) {
           onKeyDown={(e) => e.key === 'Enter' && void onBarcodeEnter()}
           className="flex-1 min-w-[160px] rounded-xl bg-indigo-950/40 border border-indigo-400/30 px-3 py-2.5 text-white"
         />
+        <button
+          type="button"
+          onClick={() => void toggleCamera()}
+          className="rounded-xl bg-indigo-600/80 text-white px-3 py-2.5 text-sm border border-indigo-300/30"
+          title="SoftPOS camera assist"
+        >
+          {camOn ? 'Tắt cam' : 'Camera'}
+        </button>
       </div>
+      {camOn && (
+        <div className="px-3 pt-2">
+          <video
+            ref={videoRef}
+            className="w-full max-h-40 rounded-xl border border-indigo-400/30 object-cover bg-black"
+            muted
+            playsInline
+          />
+          <p className="text-xs text-slate-400 mt-1">
+            Hướng camera vào mã vạch rồi gõ/paste code vào ô barcode (P4 SoftPOS assist).
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="mx-3 mt-2 text-sm text-rose-300 bg-rose-500/10 border border-rose-400/20 rounded-lg px-3 py-2">

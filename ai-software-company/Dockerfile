@@ -30,11 +30,12 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 COPY . .
-# Drop secrets / local junk if copied (belt)
-RUN rm -rf .venv .data .mem0 web/node_modules || true
+# Drop local junk if present (.venv is created by uv sync above — never delete it)
+RUN rm -rf .data .mem0 web/node_modules || true
 COPY --from=web-build /web/dist ./web/dist
 
 ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH=/app \
     SERVE_WEB=1 \
     USE_ALEMBIC=1 \
     OUTBOX_WORKER=1 \

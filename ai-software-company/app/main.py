@@ -40,8 +40,30 @@ def _cors_origins() -> list[str]:
     ]
 
 
+def _init_sentry() -> None:
+    """Optional Sentry (P4-M4). Set SENTRY_DSN to enable."""
+    dsn = os.getenv("SENTRY_DSN", "").strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+
+        sentry_sdk.init(
+            dsn=dsn,
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            environment=os.getenv("SENTRY_ENV", "local"),
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+        )
+        print("[ops] Sentry enabled")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[ops] Sentry init skipped: {exc}")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    _init_sentry()
     info = bootstrap_pos()
     started = start_outbox_worker()
     print(f"[pos] DB ready. Demo login: {info['admin_email']} / {info['admin_password']}")
@@ -52,7 +74,7 @@ async def lifespan(_app: FastAPI):
     stop_outbox_worker()
 
 
-app = FastAPI(title="AI Software Company + POS CRM", version="0.6.0", lifespan=lifespan)
+app = FastAPI(title="AI Software Company + POS CRM", version="0.7.0", lifespan=lifespan)
 _origins = _cors_origins()
 app.add_middleware(
     CORSMiddleware,
@@ -98,7 +120,7 @@ async def api_root():
     return {
         "status": "running",
         "product": "POS + CRM (Phase 1–4) + AI agents",
-        "version": "0.6.0",
+        "version": "0.7.0",
         "agents": "memory → planner(Ava) → coder(Rex) → reviewer(Kai)",
         "pos_api": "/api/v1/*",
         "docs": "/docs",
@@ -108,6 +130,8 @@ async def api_root():
             "pos_login": "POST /api/v1/auth/login",
             "pos_products": "GET /api/v1/products",
             "pos_orders": "POST /api/v1/orders",
+            "ai_event": "POST /api/v1/ai/event",
+            "export_pdf": "GET /api/v1/reports/export.pdf",
             "roles": "GET /agents/roles",
             "run": "POST /run",
             "memory": "GET /memory",
@@ -133,13 +157,23 @@ async def health():
         "ok": True,
         "graph": "memory → planner → coding → review",
         "pos": "phase1-4-full",
-        "version": "0.6.0",
+        "version": "0.7.0",
+        "agent_on_order": os.getenv("AGENT_ON_ORDER", "0") == "1",
+        "sentry": bool(os.getenv("SENTRY_DSN")),
         "db_backend": __import__("pos.db", fromlist=["db_backend"]).db_backend(),
         "outbox_worker": worker_stats(),
         "celery_enabled": __import__("os").getenv("CELERY_ENABLED", "0") == "1",
-        "llm_enabled": settings.llm_enabled,
-        "model": settings.xai_model if settings.llm_enabled else None,
-        "mode": "llm" if settings.llm_enabled else "offline",
+        "llm_enabled": settings.llm_enabled and not settings.force_offline,
+        "model": (
+            (settings.xai_model if settings.xai_api_key else settings.gemini_model)
+            if settings.llm_enabled and not settings.force_offline
+            else None
+        ),
+        "mode": (
+            "offline"
+            if settings.force_offline or not settings.llm_enabled
+            else ("xai" if settings.xai_api_key else "gemini")
+        ),
         "memory_backend": mem.backend,
         "memory_provider": settings.mem0_provider if mem.mem0_enabled else "local",
         "memory_user_id": mem.user_id,

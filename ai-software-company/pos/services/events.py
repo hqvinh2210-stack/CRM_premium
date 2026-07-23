@@ -58,38 +58,21 @@ def _dispatch_event(event_type: str, payload: dict) -> None:
     if not isinstance(payload, dict):
         raise ValueError(f"Invalid payload for {event_type}")
 
-    # Optional: wire LangGraph agents on order events (P3-M4-T4)
-    if event_type in {"order.created", "order.refunded"} and os.getenv("AGENT_ON_ORDER", "0") == "1":
-        _trigger_agents(event_type, payload)
+    # Wire LangGraph agents on order events (P3-M4-T4)
+    if event_type in {"order.created", "order.refunded"}:
+        from pos.services.ai_events import agent_on_order_enabled, queue_or_run_agent
+
+        if agent_on_order_enabled():
+            # Prefer queue; do not fail outbox on agent errors unless strict
+            result = queue_or_run_agent(event_type, payload)
+            if (
+                os.getenv("AGENT_ON_ORDER_STRICT", "0") == "1"
+                and not result.get("ok")
+                and not result.get("skipped")
+            ):
+                raise RuntimeError(result.get("error") or "agent failed")
 
     return
-
-
-def _trigger_agents(event_type: str, payload: dict) -> None:
-    """Best-effort HTTP call into local /run pipeline."""
-    import urllib.error
-    import urllib.request
-
-    base = os.getenv("AGENT_PIPELINE_URL", "http://127.0.0.1:8001/run")
-    task = (
-        f"[{event_type}] POS event for order {payload.get('order_id')}: "
-        f"store={payload.get('store_id')} total={payload.get('total')}. "
-        "Review impact on stock/loyalty and suggest follow-ups."
-    )
-    body = json.dumps({"task": task, "issue_id": payload.get("order_id")}).encode()
-    req = urllib.request.Request(
-        base,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=float(os.getenv("AGENT_ON_ORDER_TIMEOUT", "8"))):
-            pass
-    except (urllib.error.URLError, TimeoutError, OSError):
-        # non-fatal for outbox if agents offline
-        if os.getenv("AGENT_ON_ORDER_STRICT", "0") == "1":
-            raise
 
 
 def process_outbox(

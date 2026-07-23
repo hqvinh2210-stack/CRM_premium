@@ -69,12 +69,28 @@ export async function removeOfflineOrder(clientId: string): Promise<void> {
   db.close()
 }
 
+export type SyncResultRow = {
+  client_id: string
+  ok: boolean
+  error?: string
+  order_id?: string
+  status?: string
+  resolution?: string | null
+}
+
+export type SyncResult = {
+  ok: boolean
+  results: SyncResultRow[]
+  conflicts: SyncResultRow[]
+  pending_left: number
+}
+
 export async function syncOfflineOrders(
   token: string,
   storeId: string,
-): Promise<{ ok: boolean; results: { client_id: string; ok: boolean; error?: string }[] }> {
+): Promise<SyncResult> {
   const pending = await listOfflineOrders()
-  if (!pending.length) return { ok: true, results: [] }
+  if (!pending.length) return { ok: true, results: [], conflicts: [], pending_left: 0 }
 
   const res = await fetch('/api/v1/orders/sync', {
     method: 'POST',
@@ -91,12 +107,19 @@ export async function syncOfflineOrders(
   }
   const data = (await res.json()) as {
     ok: boolean
-    results: { client_id: string; ok: boolean; error?: string }[]
+    results: SyncResultRow[]
   }
   for (const r of data.results || []) {
     if (r.ok) await removeOfflineOrder(r.client_id)
   }
-  return data
+  const conflicts = (data.results || []).filter((r) => !r.ok && r.status === 'conflict')
+  const left = await listOfflineOrders()
+  return {
+    ok: data.ok,
+    results: data.results || [],
+    conflicts,
+    pending_left: left.length,
+  }
 }
 
 export function isOnline(): boolean {

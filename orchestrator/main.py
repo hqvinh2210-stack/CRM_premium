@@ -40,7 +40,9 @@ def _extract_task(payload: dict[str, Any]) -> str | None:
 
 
 async def _run_pipeline(task: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    # LLM agents (Ava→Rex→Kai) often need 90–180s; free Cloudflare tunnel adds RTT
+    timeout = float(os.getenv("PIPELINE_TIMEOUT", "180"))
+    async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(PIPELINE_URL, json={"task": task})
         resp.raise_for_status()
         data = resp.json()

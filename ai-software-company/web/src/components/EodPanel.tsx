@@ -75,6 +75,25 @@ export function EodPanel() {
           >
             Xuất TXT
           </a>
+          <button
+            type="button"
+            className="rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-100 px-3 py-2 text-sm font-medium"
+            onClick={async () => {
+              if (!token || !storeId) return
+              const res = await fetch(api.exportPdfUrl(), {
+                headers: { Authorization: `Bearer ${token}`, 'X-Store-Id': storeId },
+              })
+              const blob = await res.blob()
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = 'eod.pdf'
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+          >
+            Xuất PDF
+          </button>
         </div>
       </div>
 
