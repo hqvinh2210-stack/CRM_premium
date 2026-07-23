@@ -98,10 +98,14 @@ Workflow: `.github/workflows/deploy-frontend.yml` (build `ai-software-company/we
 ### Bật Pages (một lần)
 
 1. Repo **Settings → Pages**
-2. **Source:** GitHub Actions
-3. (Optional) **Settings → Secrets and variables → Actions → Variables**
+2. **Build and deployment → Source:** **Deploy from a branch**
+3. **Branch:** `gh-pages` / folder `/ (root)` → Save  
+   (Workflow tự push artifact lên nhánh `gh-pages`)
+4. (Optional) **Settings → Secrets and variables → Actions → Variables**
    - `VITE_API_BASE` = URL API public, ví dụ `https://your-vps:8001`  
      (để trống cũng được — nhập API URL trên màn Login)
+
+> Nếu trước đó chọn “GitHub Actions” mà job `deploy-pages` fail, đổi sang **Deploy from a branch** như trên.
 
 ### URL sau khi deploy
 

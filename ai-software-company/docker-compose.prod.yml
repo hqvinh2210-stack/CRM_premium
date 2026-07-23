@@ -88,6 +88,9 @@ services:
   worker:
     build: .
     restart: unless-stopped
+    # Celery has no HTTP server — disable image HEALTHCHECK (curl :8001)
+    healthcheck:
+      disable: true
     command: ["celery", "-A", "workers.celery_app.celery_app", "worker", "-l", "info", "-B"]
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD:-crm_change_me}@postgres:5432/${POSTGRES_DB:-crm_pos}

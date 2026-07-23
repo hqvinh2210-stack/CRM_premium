@@ -8,17 +8,16 @@ on:
       - ".github/workflows/deploy-frontend.yml"
   workflow_dispatch:
 
+# Deploy static SPA to branch `gh-pages` (Settings → Pages → Deploy from a branch → gh-pages / root)
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,25 +33,20 @@ jobs:
 
       - name: Install & build
         env:
-          # Project Pages: https://<owner>.github.io/CRM_premium/
+          # Project site: https://<owner>.github.io/CRM_premium/
           VITE_BASE: /CRM_premium/
-          # Optional public API origin (Settings → Secrets and variables → Actions)
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
         run: |
           npm ci
           npm run build
+          # SPA deep-link fallback for GitHub Pages (refresh on client routes)
+          cp dist/index.html dist/404.html
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: ai-software-company/web/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ai-software-company/web/dist
+          force_orphan: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
