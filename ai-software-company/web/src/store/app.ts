@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Customer } from '../lib/api'
 
-export type AppModule = 'pos' | 'crm' | 'eod' | 'inventory'
+export type AppModule = 'pos' | 'crm' | 'eod' | 'inventory' | 'ops'
 
 type AppState = {
   module: AppModule

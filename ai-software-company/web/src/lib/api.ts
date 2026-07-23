@@ -478,6 +478,89 @@ export const api = {
     const q = date ? `?date=${date}` : ''
     return `${resolveApiBase()}/api/v1/reports/export.pdf${q}`
   },
+  exportXlsxUrl(days = 7) {
+    return `${resolveApiBase()}/api/v1/reports/export.xlsx?days=${days}`
+  },
+  opsMetrics(token: string, storeId: string) {
+    return request<{
+      orders_today: number
+      revenue_today: string
+      cash_sales_today: string
+      customers_total: number
+      low_stock_skus: number
+      outbox: { pending_or_failed: number; dead_letter: number }
+      shift: {
+        id: string
+        status: string
+        opening_cash: string
+        opened_at?: string | null
+        user_id: string
+      } | null
+    }>('/api/v1/ops/metrics', { token, storeId })
+  },
+  opsAudit(token: string, storeId: string, limit = 50) {
+    return request<{
+      count: number
+      items: {
+        action: string
+        detail?: string | null
+        created_at?: string | null
+        entity?: string | null
+        entity_id?: string | null
+      }[]
+    }>(`/api/v1/ops/audit?limit=${limit}`, { token, storeId })
+  },
+  opsStaff(token: string, storeId: string) {
+    return request<{
+      staff: {
+        email: string
+        full_name?: string | null
+        role: string
+        is_active: boolean
+        user_id: string
+      }[]
+    }>('/api/v1/ops/staff', { token, storeId })
+  },
+  opsBackupUrl() {
+    return `${resolveApiBase()}/api/v1/ops/backup.json`
+  },
+  openShift(token: string, storeId: string, opening_cash = 0, note?: string) {
+    return request<{ id: string; status: string; opening_cash: string }>(
+      '/api/v1/shifts/open',
+      {
+        method: 'POST',
+        token,
+        storeId,
+        body: JSON.stringify({ opening_cash, note: note ?? null }),
+      },
+    )
+  },
+  closeShift(
+    token: string,
+    storeId: string,
+    shiftId: string,
+    closing_cash: number,
+    note?: string,
+  ) {
+    return request<{
+      id: string
+      status: string
+      variance?: string | null
+      expected_cash?: string | null
+    }>(`/api/v1/shifts/${shiftId}/close`, {
+      method: 'POST',
+      token,
+      storeId,
+      body: JSON.stringify({ closing_cash, note: note ?? null }),
+    })
+  },
+  currentShift(token: string, storeId: string) {
+    return request<{ shift: { id: string; status: string; opening_cash: string } | null }>(
+      '/api/v1/shifts/current',
+      { token, storeId },
+    )
+  },
+
   posAgentEvent(
     token: string,
     storeId: string,

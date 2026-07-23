@@ -9,10 +9,12 @@ from pos.routers import (
     integrations,
     inventory,
     loyalty,
+    ops,
     orders,
     payments,
     promotions,
     reports,
+    shifts,
     tasks,
 )
 
@@ -31,3 +33,5 @@ api_router.include_router(payments.router)
 api_router.include_router(events.router)
 api_router.include_router(tasks.router)
 api_router.include_router(integrations.router)
+api_router.include_router(ops.router)
+api_router.include_router(shifts.router)

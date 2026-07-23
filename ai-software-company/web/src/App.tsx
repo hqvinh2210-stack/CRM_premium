@@ -3,6 +3,7 @@ import { CrmApp } from './components/crm/CrmApp'
 import { EodPanel } from './components/EodPanel'
 import { InventoryPanel } from './components/InventoryPanel'
 import { LoginPage } from './components/LoginPage'
+import { OpsPanel } from './components/OpsPanel'
 import { PosApp } from './components/PosApp'
 import { useAppNav } from './store/app'
 import { useAuth } from './store/auth'
@@ -26,6 +27,7 @@ export default function App() {
           <EodPanel />
         </div>
       )}
+      {module === 'ops' && <OpsPanel />}
     </AppShell>
   )
 }

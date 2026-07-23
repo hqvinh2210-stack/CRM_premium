@@ -74,7 +74,7 @@ async def lifespan(_app: FastAPI):
     stop_outbox_worker()
 
 
-app = FastAPI(title="AI Software Company + POS CRM", version="0.7.0", lifespan=lifespan)
+app = FastAPI(title="AI Software Company + POS CRM", version="0.8.0", lifespan=lifespan)
 _origins = _cors_origins()
 # Explicit Pages + local origins (avoids browser quirks with bare "*")
 _DEFAULT_EXTRA = [
@@ -176,7 +176,7 @@ async def api_root():
     return {
         "status": "running",
         "product": "POS + CRM (Phase 1–4) + AI agents",
-        "version": "0.7.0",
+        "version": "0.8.0",
         "agents": "memory → planner(Ava) → coder(Rex) → reviewer(Kai)",
         "pos_api": "/api/v1/*",
         "docs": "/docs",
@@ -186,8 +186,9 @@ async def api_root():
             "pos_login": "POST /api/v1/auth/login",
             "pos_products": "GET /api/v1/products",
             "pos_orders": "POST /api/v1/orders",
-            "ai_event": "POST /api/v1/ai/event",
-            "export_pdf": "GET /api/v1/reports/export.pdf",
+            "ops_metrics": "GET /api/v1/ops/metrics",
+            "shifts": "POST /api/v1/shifts/open",
+            "export_xlsx": "GET /api/v1/reports/export.xlsx",
             "roles": "GET /agents/roles",
             "run": "POST /run",
             "memory": "GET /memory",
@@ -212,8 +213,8 @@ async def health():
     return {
         "ok": True,
         "graph": "memory → planner → coding → review",
-        "pos": "phase1-4-full",
-        "version": "0.7.0",
+        "pos": "phase1-5-ops",
+        "version": "0.8.0",
         "agent_on_order": os.getenv("AGENT_ON_ORDER", "0") == "1",
         "sentry": bool(os.getenv("SENTRY_DSN")),
         "db_backend": __import__("pos.db", fromlist=["db_backend"]).db_backend(),

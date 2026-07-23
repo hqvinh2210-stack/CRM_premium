@@ -18,6 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { id: 'crm', label: t('crm') },
     { id: 'inventory', label: t('inventory') },
     { id: 'eod', label: t('reports') },
+    { id: 'ops', label: t('ops') },
   ]
 
   useEffect(() => {

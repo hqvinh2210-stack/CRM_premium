@@ -292,6 +292,80 @@ def export_sales_csv(
     )
 
 
+@router.get("/export.xlsx")
+def export_sales_xlsx(
+    days: int = Query(default=7, ge=1, le=90),
+    ctx: AuthContext = Depends(require_any("manager", "admin")),
+    db: Session = Depends(get_db),
+):
+    """
+    Excel-compatible SpreadsheetML export (P5) — opens in Excel/LibreOffice
+    without third-party xlsx libraries.
+    """
+    from datetime import timedelta
+    from xml.sax.saxutils import escape
+
+    today = date.today()
+    start_day = today - timedelta(days=days - 1)
+    start_dt = datetime.combine(start_day, time.min)
+    end_dt = datetime.combine(today, time.max)
+    orders = (
+        db.query(Order)
+        .filter(
+            Order.store_id == ctx.store_id,
+            Order.status == OrderStatus.paid,
+            Order.paid_at >= start_dt,
+            Order.paid_at <= end_dt,
+        )
+        .order_by(Order.paid_at.asc())
+        .all()
+    )
+
+    def cell(v: str, num: bool = False) -> str:
+        t = "Number" if num else "String"
+        return f'<Cell><Data ss:Type="{t}">{escape(v)}</Data></Cell>'
+
+    rows_xml = [
+        "<Row>"
+        + cell("order_id")
+        + cell("paid_at")
+        + cell("customer_id")
+        + cell("subtotal")
+        + cell("discount")
+        + cell("total")
+        + cell("status")
+        + "</Row>"
+    ]
+    for o in orders:
+        rows_xml.append(
+            "<Row>"
+            + cell(o.id)
+            + cell(o.paid_at.isoformat() if o.paid_at else "")
+            + cell(o.customer_id or "")
+            + cell(str(o.subtotal), num=True)
+            + cell(str(o.discount), num=True)
+            + cell(str(o.total), num=True)
+            + cell(o.status.value)
+            + "</Row>"
+        )
+
+    xml = (
+        '<?xml version="1.0"?>\n'
+        '<?mso-application progid="Excel.Sheet"?>\n'
+        '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" '
+        'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n'
+        f'<Worksheet ss:Name="Sales_{days}d"><Table>\n'
+        + "\n".join(rows_xml)
+        + "\n</Table></Worksheet>\n</Workbook>\n"
+    )
+    data = xml.encode("utf-8")
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/vnd.ms-excel",
+        headers={"Content-Disposition": f'attachment; filename="sales_{days}d.xls"'},
+    )
+
+
 def _eod_lines(db: Session, store_id: str, day: date) -> tuple[list[str], Decimal, int]:
     start = datetime.combine(day, time.min)
     end = datetime.combine(day, time.max)

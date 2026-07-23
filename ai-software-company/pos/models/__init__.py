@@ -9,6 +9,7 @@ from pos.models.loyalty import CustomerPoints, LoyaltyProgram, PointTransaction,
 from pos.models.orders import Order, OrderLine, Payment
 from pos.models.payments_ext import PaymentIntent
 from pos.models.promo import Promotion
+from pos.models.shifts import CashShift
 
 __all__ = [
     "User",
@@ -36,4 +37,5 @@ __all__ = [
     "EInvoice",
     "NotificationLog",
     "PaymentIntent",
+    "CashShift",
 ]

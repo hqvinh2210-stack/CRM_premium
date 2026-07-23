@@ -20,6 +20,10 @@ const dict = {
     stocktake: 'Kiểm kê',
     exportCsv: 'Xuất CSV',
     language: 'Ngôn ngữ',
+    ops: 'Ops',
+    openShift: 'Mở ca',
+    closeShift: 'Đóng ca',
+    backup: 'Backup',
   },
   en: {
     pos: 'POS',
@@ -38,6 +42,10 @@ const dict = {
     stocktake: 'Stocktake',
     exportCsv: 'Export CSV',
     language: 'Language',
+    ops: 'Ops',
+    openShift: 'Open shift',
+    closeShift: 'Close shift',
+    backup: 'Backup',
   },
 } as const
 
