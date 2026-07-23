@@ -1,0 +1,92 @@
+# Production-like stack (API + Postgres + Redis + Celery)
+# Usage:
+#   cp .env.example .env   # fill secrets
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# UI: http://localhost:8001/   (SPA served by FastAPI)
+# API docs: http://localhost:8001/docs
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-crm_pos}
+    volumes:
+      - crm_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm} -d ${POSTGRES_DB:-crm_pos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - crm_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8001}:8001"
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD:-crm_change_me}@postgres:5432/${POSTGRES_DB:-crm_pos}
+      USE_ALEMBIC: "1"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_ENABLED: "1"
+      CELERY_ON_PUBLISH: "1"
+      OUTBOX_WORKER: "1"
+      SERVE_WEB: "1"
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8001}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      LINEAR_API_KEY: ${LINEAR_API_KEY:-}
+      LINEAR_TEAM_ID: ${LINEAR_TEAM_ID:-}
+      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:-DEMO}
+      VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-DEMOSECRET}
+      MOMO_PARTNER_CODE: ${MOMO_PARTNER_CODE:-MOMO}
+      MOMO_ACCESS_KEY: ${MOMO_ACCESS_KEY:-}
+      MOMO_SECRET_KEY: ${MOMO_SECRET_KEY:-}
+      ALLOW_OFFLINE_AGENTS: ${ALLOW_OFFLINE_AGENTS:-1}
+      MEM0_USE_REMOTE: ${MEM0_USE_REMOTE:-0}
+      RATE_LIMIT_ENABLED: "1"
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["celery", "-A", "workers.celery_app.celery_app", "worker", "-l", "info", "-B"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD:-crm_change_me}@postgres:5432/${POSTGRES_DB:-crm_pos}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_ENABLED: "1"
+      USE_ALEMBIC: "0"
+      OUTBOX_WORKER: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  crm_pg_data:
+  crm_redis_data:

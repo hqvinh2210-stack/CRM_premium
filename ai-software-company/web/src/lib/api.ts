@@ -38,6 +38,28 @@ export type Customer = {
   phone: string
   name: string
   email?: string | null
+  tags?: string | null
+  notes?: string | null
+  created_at?: string | null
+}
+
+export type CustomerProfile = {
+  customer: Customer
+  points: { balance: number; lifetime_earned: number }
+  stats: {
+    order_count: number
+    total_spend: string
+    last_purchase: string | null
+    recency_days: number | null
+    segment: string
+  }
+  orders: {
+    id: string
+    total: string
+    status: string
+    paid_at: string | null
+    lines: { product_name: string; qty: number; line_total: string }[]
+  }[]
 }
 
 type HeadersInit_ = Record<string, string>
@@ -178,6 +200,10 @@ export const api = {
       { token, storeId },
     )
   },
+  listCustomers(token: string, storeId: string, q?: string) {
+    const qs = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''
+    return request<Customer[]>(`/api/v1/customers${qs}`, { token, storeId })
+  },
   searchCustomers(token: string, storeId: string, q: string) {
     return request<Customer[]>(
       `/api/v1/customers/search?q=${encodeURIComponent(q)}`,
@@ -192,6 +218,43 @@ export const api = {
       body: JSON.stringify({ phone, name }),
     })
   },
+  updateCustomer(
+    token: string,
+    storeId: string,
+    id: string,
+    body: { name?: string; notes?: string; email?: string; tags?: string },
+  ) {
+    return request<Customer>(`/api/v1/customers/${id}`, {
+      method: 'PATCH',
+      token,
+      storeId,
+      body: JSON.stringify(body),
+    })
+  },
+  customerProfile(token: string, storeId: string, id: string) {
+    return request<CustomerProfile>(`/api/v1/customers/${id}/profile`, {
+      token,
+      storeId,
+    })
+  },
+  customerOrders(token: string, storeId: string, id: string) {
+    return request<Order[]>(`/api/v1/customers/${id}/orders`, { token, storeId })
+  },
+  rfm(token: string, storeId: string) {
+    return request<{
+      segments: {
+        customer_id: string
+        name: string
+        phone: string
+        segment: string
+        frequency: number
+        monetary: string
+        recency_days: number
+      }[]
+      count: number
+    }>('/api/v1/reports/rfm', { token, storeId })
+  },
+
   dailySales(token: string, storeId: string) {
     return request<{
       date: string
@@ -238,6 +301,142 @@ export const api = {
       `/api/v1/promotions/orders/${orderId}/apply`,
       { method: 'POST', token, storeId, body: JSON.stringify({ code: code ?? null }) },
     )
+  },
+  refund(token: string, storeId: string, orderId: string, reason?: string) {
+    return request<Order>(`/api/v1/orders/${orderId}/refund`, {
+      method: 'POST',
+      token,
+      storeId,
+      body: JSON.stringify({ reason: reason ?? null }),
+    })
+  },
+  lowStock(token: string, storeId: string, threshold = 10) {
+    return request<{ threshold: number; items: { product_id: string; sku: string; name: string; qty: number }[] }>(
+      `/api/v1/inventory/low-stock?threshold=${threshold}`,
+      { token, storeId },
+    )
+  },
+  transferStock(
+    token: string,
+    storeId: string,
+    body: { from_store_id: string; to_store_id: string; product_id: string; qty: number; note?: string },
+  ) {
+    return request<{ id: string; status: string; qty: number; to_store_id: string }>(
+      '/api/v1/inventory/transfers',
+      { method: 'POST', token, storeId, body: JSON.stringify(body) },
+    )
+  },
+  stocktake(
+    token: string,
+    storeId: string,
+    body: { product_id: string; counted_qty: number; note?: string; apply_adjustment?: boolean },
+  ) {
+    return request<{
+      id: string
+      system_qty: number
+      counted_qty: number
+      variance: number
+      applied: boolean
+    }>('/api/v1/inventory/stocktake', {
+      method: 'POST',
+      token,
+      storeId,
+      body: JSON.stringify(body),
+    })
+  },
+  customerTimeline(token: string, storeId: string, customerId: string) {
+    return request<{
+      customer_id: string
+      count: number
+      events: {
+        at: string | null
+        kind: string
+        title: string
+        ref_id: string
+        meta?: Record<string, unknown>
+      }[]
+    }>(`/api/v1/customers/${customerId}/timeline`, { token, storeId })
+  },
+  analytics(token: string, storeId: string, days = 7) {
+    return request<{
+      days: number
+      totals: {
+        order_count: number
+        revenue: string
+        customers: number
+        avg_order_value: string
+        clv_proxy_avg: string
+      }
+      by_day: { date: string; order_count: number; revenue: string }[]
+      by_hour_today: { hour: number; revenue: string }[]
+      top_products: { name: string; qty: number; revenue: string }[]
+    }>(`/api/v1/reports/analytics?days=${days}`, { token, storeId })
+  },
+  listTasks(token: string, storeId: string, customerId?: string, status = 'open') {
+    const q = new URLSearchParams({ status })
+    if (customerId) q.set('customer_id', customerId)
+    return request<{
+      tasks: {
+        id: string
+        customer_id: string
+        title: string
+        notes?: string | null
+        status: string
+        due_at?: string | null
+      }[]
+    }>(`/api/v1/tasks?${q}`, { token, storeId })
+  },
+  createTask(
+    token: string,
+    storeId: string,
+    body: { customer_id: string; title: string; notes?: string },
+  ) {
+    return request<{ id: string; title: string; status: string }>('/api/v1/tasks', {
+      method: 'POST',
+      token,
+      storeId,
+      body: JSON.stringify(body),
+    })
+  },
+  updateTask(
+    token: string,
+    storeId: string,
+    id: string,
+    body: { status?: string; title?: string; notes?: string },
+  ) {
+    return request<{ id: string; status: string }>(`/api/v1/tasks/${id}`, {
+      method: 'PATCH',
+      token,
+      storeId,
+      body: JSON.stringify(body),
+    })
+  },
+  issueEinvoice(
+    token: string,
+    storeId: string,
+    orderId: string,
+    extra?: { tax_code?: string; buyer_name?: string },
+  ) {
+    return request<{ id: string; invoice_no: string; status: string }>(
+      '/api/v1/invoices/e-invoice',
+      {
+        method: 'POST',
+        token,
+        storeId,
+        body: JSON.stringify({ order_id: orderId, ...extra }),
+      },
+    )
+  },
+  notifyOrder(token: string, storeId: string, orderId: string, phone?: string) {
+    return request<{ id: string; status: string; channel: string }>('/api/v1/notify/order', {
+      method: 'POST',
+      token,
+      storeId,
+      body: JSON.stringify({ order_id: orderId, phone: phone ?? null, channel: 'sms' }),
+    })
+  },
+  exportCsvUrl(days = 7) {
+    return `/api/v1/reports/export.csv?days=${days}`
   },
 }
 

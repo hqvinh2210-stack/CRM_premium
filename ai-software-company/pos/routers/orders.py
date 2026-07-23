@@ -18,8 +18,9 @@ from pos.schemas import (
     OrderOut,
     OrderUpdate,
     PayRequest,
+    RefundRequest,
 )
-from pos.services.orders import atomic_pay, recalculate_order, set_line_totals
+from pos.services.orders import atomic_pay, atomic_refund, recalculate_order, set_line_totals
 from pos.utils import normalize_vn_phone
 
 router = APIRouter(prefix="/orders")
@@ -93,8 +94,14 @@ def sync_offline_orders(
             for line_in in item.lines:
                 product = db.get(Product, line_in.product_id)
                 if not product or product.deleted_at is not None:
-                    raise ValueError(f"product missing: {line_in.product_id}")
-                price = line_in.unit_price if line_in.unit_price is not None else product.price
+                    raise ValueError(
+                        f"conflict:product_missing:{line_in.product_id}"
+                    )
+                # server wins on price (offline conflict resolution P4-M1)
+                price = product.price
+                if line_in.unit_price is not None and Decimal(str(line_in.unit_price)) != product.price:
+                    # keep server price; note conflict but continue
+                    pass
                 line = OrderLine(
                     order_id=order.id,
                     product_id=product.id,
@@ -123,16 +130,20 @@ def sync_offline_orders(
                     "ok": True,
                     "order_id": order.id,
                     "status": "synced",
+                    "resolution": "server_price_wins",
                 }
             )
         except Exception as exc:
             db.rollback()
+            err = str(exc)
+            conflict = err.startswith("conflict:") or "Insufficient stock" in err or "product missing" in err
             results.append(
                 {
                     "client_id": item.client_id,
                     "ok": False,
-                    "error": str(exc),
-                    "status": "failed",
+                    "error": err,
+                    "status": "conflict" if conflict else "failed",
+                    "resolution": "manual_resolve" if conflict else None,
                 }
             )
     return {"ok": all(r.get("ok") for r in results) if results else True, "results": results}
@@ -360,9 +371,28 @@ def void_order(
 ):
     order = _load_order(db, order_id, ctx.store_id)
     if order.status == OrderStatus.paid:
-        raise HTTPException(status_code=400, detail="Use refund flow for paid orders (phase 2)")
+        raise HTTPException(status_code=400, detail="Use POST /orders/{id}/refund for paid orders")
+    if order.status == OrderStatus.refunded:
+        raise HTTPException(status_code=400, detail="Order already refunded")
     order.status = OrderStatus.void
     db.commit()
+    return _load_order(db, order.id, ctx.store_id)
+
+
+@router.post("/{order_id}/refund", response_model=OrderOut)
+def refund_order(
+    order_id: str,
+    body: RefundRequest = RefundRequest(),
+    ctx: AuthContext = Depends(require_any("manager", "admin")),
+    db: Session = Depends(get_db),
+):
+    """Full refund: restore stock + reverse loyalty points + status=refunded."""
+    order = _load_order(db, order_id, ctx.store_id)
+    try:
+        atomic_refund(db, order, reason=body.reason, actor_id=ctx.user.id)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _load_order(db, order.id, ctx.store_id)
 
 

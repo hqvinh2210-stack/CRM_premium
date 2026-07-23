@@ -1,11 +1,10 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api, type Customer, type Order, type OrderLine, type Product } from '../lib/api'
 import { isOnline } from '../lib/offline'
+import { useAppNav } from '../store/app'
 import { useAuth } from '../store/auth'
 import { CartPanel } from './CartPanel'
-import { EodPanel } from './EodPanel'
 import { ProductGrid } from './ProductGrid'
-import { StoreBar } from './StoreBar'
 
 function localLine(p: Product, qty = 1): OrderLine {
   const price = Number(p.price)
@@ -20,10 +19,19 @@ function localLine(p: Product, qty = 1): OrderLine {
   }
 }
 
-function recalc(lines: OrderLine[], discountPercent: number): Pick<Order, 'subtotal' | 'discount' | 'total' | 'discount_percent'> {
+function recalc(
+  lines: OrderLine[],
+  discountPercent: number,
+  base?: Partial<Order>,
+): Order {
   const subtotal = lines.reduce((s, l) => s + Number(l.line_total), 0)
   const discount = (subtotal * discountPercent) / 100
   return {
+    id: base?.id ?? `offline-${crypto.randomUUID()}`,
+    status: 'draft',
+    customer_id: base?.customer_id ?? null,
+    note: base?.note ?? null,
+    lines,
     subtotal,
     discount,
     total: Math.max(subtotal - discount, 0),
@@ -33,12 +41,19 @@ function recalc(lines: OrderLine[], discountPercent: number): Pick<Order, 'subto
 
 export function PosApp() {
   const { token, storeId } = useAuth()
-  const [view, setView] = useState<'pos' | 'eod'>('pos')
+  const { posCustomer, clearPosCustomer, openCrmProfile, setModule } = useAppNav()
   const [order, setOrder] = useState<Order | null>(null)
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [receipt, setReceipt] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [discount, setDiscount] = useState(0)
+
+  // CRM → POS: preselect customer
+  useEffect(() => {
+    if (posCustomer) {
+      setCustomer(posCustomer)
+    }
+  }, [posCustomer])
 
   const addProduct = useCallback(
     async (p: Product) => {
@@ -52,23 +67,14 @@ export function PosApp() {
             if (idx >= 0) {
               const q = lines[idx].qty + 1
               const unit = Number(lines[idx].unit_price)
-              lines[idx] = {
-                ...lines[idx],
-                qty: q,
-                line_total: unit * q,
-              }
+              lines[idx] = { ...lines[idx], qty: q, line_total: unit * q }
             } else {
               lines.push(localLine(p, 1))
             }
-            const totals = recalc(lines, discount)
-            return {
-              id: prev?.id ?? `offline-${crypto.randomUUID()}`,
-              status: 'draft',
-              customer_id: customer?.id ?? null,
-              note: prev?.note ?? null,
-              lines,
-              ...totals,
-            }
+            return recalc(lines, discount, {
+              id: prev?.id,
+              customer_id: customer?.id ?? prev?.customer_id,
+            })
           })
           return
         }
@@ -88,11 +94,35 @@ export function PosApp() {
   )
 
   return (
-    <div className="h-screen flex flex-col bg-slate-950 text-white">
-      <StoreBar
-        view={view}
-        onEod={() => setView((v) => (v === 'eod' ? 'pos' : 'eod'))}
-      />
+    <div className="h-full flex flex-col min-h-0">
+      {customer && (
+        <div className="px-4 py-2 border-b border-emerald-400/20 bg-emerald-500/10 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-emerald-200">
+            Đang bán cho: <strong>{customer.name || 'KH'}</strong> · {customer.phone}
+          </span>
+          <button
+            className="text-indigo-300 underline text-xs"
+            onClick={() => openCrmProfile(customer.id)}
+          >
+            Mở CRM
+          </button>
+          <button
+            className="text-slate-400 underline text-xs ml-auto"
+            onClick={() => {
+              setCustomer(null)
+              clearPosCustomer()
+            }}
+          >
+            Bỏ chọn KH
+          </button>
+          <button
+            className="text-slate-400 underline text-xs"
+            onClick={() => setModule('crm')}
+          >
+            ← CRM
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="px-4 py-2 bg-rose-500/15 text-rose-200 text-sm border-b border-rose-400/20">
@@ -100,24 +130,21 @@ export function PosApp() {
         </div>
       )}
 
-      {view === 'eod' ? (
-        <div className="flex-1 overflow-auto">
-          <EodPanel />
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_380px]">
-          <ProductGrid onAdd={(p) => void addProduct(p)} />
-          <CartPanel
-            order={order}
-            setOrder={setOrder}
-            customer={customer}
-            setCustomer={setCustomer}
-            discount={discount}
-            setDiscount={setDiscount}
-            onPaid={(_o, text) => setReceipt(text)}
-          />
-        </div>
-      )}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_380px]">
+        <ProductGrid onAdd={(p) => void addProduct(p)} />
+        <CartPanel
+          order={order}
+          setOrder={setOrder}
+          customer={customer}
+          setCustomer={(c) => {
+            setCustomer(c)
+            if (!c) clearPosCustomer()
+          }}
+          discount={discount}
+          setDiscount={setDiscount}
+          onPaid={(_o, text) => setReceipt(text)}
+        />
+      </div>
 
       {receipt && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">

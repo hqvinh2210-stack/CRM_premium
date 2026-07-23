@@ -18,6 +18,7 @@ class OutboxStatus(str, enum.Enum):
     pending = "pending"
     processed = "processed"
     failed = "failed"
+    dead_letter = "dead_letter"
 
 
 class OutboxEvent(Base):

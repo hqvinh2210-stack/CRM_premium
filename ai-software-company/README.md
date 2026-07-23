@@ -32,19 +32,49 @@ powershell -File scripts/start_loop.ps1
 Fail bất kỳ stage → Linear issue → webhook → Ava/Rex/Kai.  
 Chi tiết: `docs/DELIVERY_LOOP.md`
 
-## Full stack (Phase 1–3 core)
+## Full stack (Phase 1–4) · v0.6
 
 | Area | Endpoints |
 |------|-----------|
-| Loyalty | `GET /api/v1/loyalty/program`, `/points/{id}`, `/rewards` |
+| Loyalty | `GET /api/v1/loyalty/program`, `/points/{id}`, `/rewards`, `POST /loyalty/expire` |
 | Inventory | `POST /inventory/transfers`, `/stocktake`, `GET /low-stock` |
 | Promos | `GET/POST /promotions`, `POST /promotions/orders/{id}/apply` |
 | AI | `GET /ai/recommend`, `/ai/coach` |
-| Payments | `POST /payments/intent`, `/capture` (sandbox VN) |
-| Events | `POST /events/process`, `GET /events/outbox` |
-| RFM | `GET /reports/rfm` |
+| Payments | `POST /payments/intent`, `/capture` · VNPay/MoMo **HMAC sandbox** · IPN `/payments/vnpay/*`, `/momo/*` |
+| Refund | `POST /orders/{id}/refund` |
+| Events | `POST /events/process`, `/requeue-dead`, `GET /events/outbox` · Celery/Redis or thread worker |
+| CRM tasks | `GET/POST /tasks`, `PATCH /tasks/{id}` |
+| Timeline | `GET /customers/{id}/timeline` |
+| E-invoice | `POST /invoices/e-invoice` |
+| Notify | `POST /notify/order` (SMS/Zalo stub) |
+| Analytics | `GET /reports/analytics`, `/export.csv`, `/export.txt`, `/rfm` |
 
-Promo demo: `SALE10` · Login: `cashier@example.com` / `cashier123`
+Promo demo: `SALE10` · Login: `cashier@example.com` / `cashier123` · Admin: `admin@example.com` / `admin123`  
+Stores seeded: `MAIN` + `BRANCH2`. Frontend: POS / CRM / Kho / Báo cáo · PWA · i18n VI/EN.
+
+### Infra: Postgres + Alembic + Redis/Celery
+
+```powershell
+# 1) Start Postgres + Redis
+docker compose up -d
+
+# 2) Env
+$env:DATABASE_URL = "postgresql+psycopg://crm:crm@127.0.0.1:5432/crm_pos"
+$env:USE_ALEMBIC = "1"
+$env:REDIS_URL = "redis://127.0.0.1:6379/0"
+$env:CELERY_ENABLED = "1"
+
+# 3) Migrate + API
+uv run alembic upgrade head
+# or: powershell -File scripts/migrate.ps1
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8001
+
+# 4) Celery worker + beat (outbox every 15s)
+uv run celery -A workers.celery_app.celery_app worker -l info -B
+# or: powershell -File scripts/start_celery.ps1
+```
+
+Default without Docker: **SQLite** + in-process outbox thread (no Redis required).
 
 ## POS + CRM Phase 1 (MVP) — API
 
@@ -262,4 +292,4 @@ ai-software-company/
 
 fastapi, uvicorn, langgraph, langchain, langchain-openai, langchain-community, pydantic, python-dotenv
 
-Chưa cài: Mem0, Redis, PostgreSQL.
+Optional prod infra: Postgres (`DATABASE_URL`), Redis+Celery (`CELERY_ENABLED=1`), VNPay/MoMo keys in `.env`.

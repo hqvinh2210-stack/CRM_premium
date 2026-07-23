@@ -93,3 +93,21 @@ def preview_redeem(
         "discount_vnd": str(body.points * program.redeem_value),
         "balance_after": bal.balance - body.points,
     }
+
+
+class ExpireIn(BaseModel):
+    ttl_days: int = Field(default=365, ge=1, le=3650)
+
+
+@router.post("/expire")
+def expire_points(
+    body: ExpireIn | None = None,
+    ctx: AuthContext = Depends(require_any("manager", "admin")),
+    db: Session = Depends(get_db),
+):
+    """Expire stale earn points older than ttl_days (loyalty expiry job)."""
+    from pos.services.loyalty import expire_stale_points
+
+    ttl = body.ttl_days if body else 365
+    return expire_stale_points(db, ttl_days=ttl)
+

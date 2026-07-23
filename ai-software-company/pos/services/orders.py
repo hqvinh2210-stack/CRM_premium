@@ -118,8 +118,95 @@ def atomic_pay(
             entity_id=order.id,
             detail=f"total={order.total} points={earned}",
         )
+        # notify stub (SMS/Zalo)
+        try:
+            from pos.services.notify import queue_order_notify
+
+            queue_order_notify(db, order)
+        except Exception:
+            pass
     except Exception:
         # never block payment on side-effects
+        pass
+
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+def atomic_refund(
+    db: Session,
+    order: Order,
+    *,
+    reason: str | None = None,
+    actor_id: str | None = None,
+) -> Order:
+    """
+    Full refund of a paid order: restore stock, reverse loyalty earn/redeem for this order,
+    mark status refunded, emit outbox + audit.
+    """
+    if order.status == OrderStatus.refunded:
+        return order
+    if order.status != OrderStatus.paid:
+        raise ValueError(f"Cannot refund order in status {order.status}")
+
+    # restore stock
+    for line in order.lines:
+        product = db.get(Product, line.product_id)
+        if not product or not product.track_inventory:
+            continue
+        stock = get_stock(db, order.store_id, product.id)
+        if stock is None:
+            stock = StockLevel(store_id=order.store_id, product_id=product.id, qty=0, version=0)
+            db.add(stock)
+            db.flush()
+        stock.qty += line.qty
+        stock.version += 1
+
+    # reverse loyalty points tied to this order
+    try:
+        from pos.services.loyalty import reverse_order_points
+
+        reverse_order_points(db, order)
+    except Exception:
+        pass
+
+    order.status = OrderStatus.refunded
+    db.add(order)
+
+    try:
+        from pos.services.events import audit, publish_event
+
+        publish_event(
+            db,
+            "order.refunded",
+            {
+                "order_id": order.id,
+                "store_id": order.store_id,
+                "customer_id": order.customer_id,
+                "total": str(order.total),
+                "reason": reason,
+            },
+        )
+        publish_event(
+            db,
+            "stock.updated",
+            {
+                "store_id": order.store_id,
+                "order_id": order.id,
+                "via": "refund",
+                "lines": [{"product_id": l.product_id, "qty": l.qty} for l in order.lines],
+            },
+        )
+        audit(
+            db,
+            actor_id=actor_id or order.user_id,
+            action="order.refunded",
+            entity="order",
+            entity_id=order.id,
+            detail=reason or f"refund total={order.total}",
+        )
+    except Exception:
         pass
 
     db.commit()

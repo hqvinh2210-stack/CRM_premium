@@ -39,3 +39,14 @@ jobs:
 
       - name: Deploy smoke (import)
         run: uv run python -m pipeline run --from deploy --stop-after deploy --skip-monitor --no-linear
+        env:
+          AGENT_FORCE_OFFLINE: "1"
+          MEM0_USE_REMOTE: "0"
+          ALLOW_OFFLINE_AGENTS: "1"
+          OUTBOX_WORKER: "0"
+
+      - name: Build frontend
+        working-directory: ai-software-company/web
+        run: |
+          npm ci
+          npm run build

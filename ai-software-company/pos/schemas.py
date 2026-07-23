@@ -166,6 +166,10 @@ class PayRequest(BaseModel):
     promo_code: str | None = None
 
 
+class RefundRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class OfflineLineIn(BaseModel):
     product_id: str
     qty: int = Field(default=1, ge=1)

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from pos.models.events import AuditLog, OutboxEvent, OutboxStatus
+
+# Max attempts before dead-letter. Override with OUTBOX_MAX_ATTEMPTS.
+DEFAULT_MAX_ATTEMPTS = int(os.getenv("OUTBOX_MAX_ATTEMPTS", "5"))
 
 
 def publish_event(db: Session, event_type: str, payload: dict) -> OutboxEvent:
@@ -15,6 +19,14 @@ def publish_event(db: Session, event_type: str, payload: dict) -> OutboxEvent:
         status=OutboxStatus.pending,
     )
     db.add(ev)
+    # Best-effort Celery kick (does not require commit yet)
+    if os.getenv("CELERY_ENABLED", "0") == "1" and os.getenv("CELERY_ON_PUBLISH", "1") == "1":
+        try:
+            from workers.tasks import process_outbox_batch
+
+            process_outbox_batch.delay(limit=20)
+        except Exception:
+            pass
     return ev
 
 
@@ -38,27 +50,117 @@ def audit(
     )
 
 
-def process_outbox(db: Session, limit: int = 50) -> dict:
-    """Simple worker: mark events processed (hooks for CRM/analytics later)."""
+def _dispatch_event(event_type: str, payload: dict) -> None:
+    """
+    In-process handlers (local worker; Celery optional later).
+    Raise to trigger retry / DLQ.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError(f"Invalid payload for {event_type}")
+
+    # Optional: wire LangGraph agents on order events (P3-M4-T4)
+    if event_type in {"order.created", "order.refunded"} and os.getenv("AGENT_ON_ORDER", "0") == "1":
+        _trigger_agents(event_type, payload)
+
+    return
+
+
+def _trigger_agents(event_type: str, payload: dict) -> None:
+    """Best-effort HTTP call into local /run pipeline."""
+    import urllib.error
+    import urllib.request
+
+    base = os.getenv("AGENT_PIPELINE_URL", "http://127.0.0.1:8001/run")
+    task = (
+        f"[{event_type}] POS event for order {payload.get('order_id')}: "
+        f"store={payload.get('store_id')} total={payload.get('total')}. "
+        "Review impact on stock/loyalty and suggest follow-ups."
+    )
+    body = json.dumps({"task": task, "issue_id": payload.get("order_id")}).encode()
+    req = urllib.request.Request(
+        base,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=float(os.getenv("AGENT_ON_ORDER_TIMEOUT", "8"))):
+            pass
+    except (urllib.error.URLError, TimeoutError, OSError):
+        # non-fatal for outbox if agents offline
+        if os.getenv("AGENT_ON_ORDER_STRICT", "0") == "1":
+            raise
+
+
+def process_outbox(
+    db: Session,
+    limit: int = 50,
+    *,
+    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    include_failed: bool = True,
+) -> dict:
+    """
+    Worker with retry + dead-letter:
+      pending (and optionally failed with attempts < max) → process
+      on hard fail after max_attempts → dead_letter
+    """
+    statuses = [OutboxStatus.pending]
+    if include_failed:
+        statuses.append(OutboxStatus.failed)
+
     rows = (
         db.query(OutboxEvent)
-        .filter(OutboxEvent.status == OutboxStatus.pending)
+        .filter(
+            OutboxEvent.status.in_(statuses),
+            OutboxEvent.attempts < max_attempts,
+        )
         .order_by(OutboxEvent.created_at.asc())
         .limit(limit)
         .all()
     )
     processed = 0
+    failed = 0
+    dead_lettered = 0
     for ev in rows:
         try:
-            # side-effects placeholder: log only
-            _ = json.loads(ev.payload)
+            payload = json.loads(ev.payload)
+            _dispatch_event(ev.event_type, payload)
             ev.status = OutboxStatus.processed
             ev.processed_at = datetime.now(UTC)
             ev.attempts += 1
+            ev.last_error = None
             processed += 1
         except Exception as exc:
-            ev.status = OutboxStatus.failed
             ev.attempts += 1
-            ev.last_error = str(exc)
+            ev.last_error = str(exc)[:2000]
+            if ev.attempts >= max_attempts:
+                ev.status = OutboxStatus.dead_letter
+                dead_lettered += 1
+            else:
+                ev.status = OutboxStatus.failed
+                failed += 1
     db.commit()
-    return {"processed": processed, "scanned": len(rows)}
+    return {
+        "processed": processed,
+        "failed": failed,
+        "dead_lettered": dead_lettered,
+        "scanned": len(rows),
+        "max_attempts": max_attempts,
+    }
+
+
+def requeue_dead_letters(db: Session, limit: int = 50) -> dict:
+    """Move dead_letter events back to pending (manual ops)."""
+    rows = (
+        db.query(OutboxEvent)
+        .filter(OutboxEvent.status == OutboxStatus.dead_letter)
+        .order_by(OutboxEvent.created_at.asc())
+        .limit(limit)
+        .all()
+    )
+    for ev in rows:
+        ev.status = OutboxStatus.pending
+        ev.attempts = 0
+        ev.last_error = None
+    db.commit()
+    return {"requeued": len(rows)}

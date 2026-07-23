@@ -1,0 +1,44 @@
+# Staging stack: Postgres + Redis for CRM POS
+# Usage:
+#   docker compose up -d
+#   set DATABASE_URL=postgresql+psycopg://crm:crm@127.0.0.1:5432/crm_pos
+#   set REDIS_URL=redis://127.0.0.1:6379/0
+#   set CELERY_ENABLED=1
+#   uv run alembic upgrade head
+#   uv run uvicorn app.main:app --port 8001
+#   uv run celery -A workers.celery_app.celery_app worker -l info -B
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: crm_postgres
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+      POSTGRES_DB: crm_pos
+    ports:
+      - "5432:5432"
+    volumes:
+      - crm_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm_pos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: crm_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - crm_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  crm_pg_data:
+  crm_redis_data:

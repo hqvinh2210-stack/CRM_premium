@@ -26,6 +26,12 @@ def seed(db: Session | None = None) -> dict:
             db.add(store)
             db.flush()
 
+        store2 = db.query(Store).filter(Store.code == "BRANCH2").first()
+        if not store2:
+            store2 = Store(code="BRANCH2", name="Chi nhanh 2", address="HN")
+            db.add(store2)
+            db.flush()
+
         admin = db.query(User).filter(User.email == "admin@example.com").first()
         if not admin:
             admin = User(
@@ -49,13 +55,14 @@ def seed(db: Session | None = None) -> dict:
             db.flush()
 
         for user, role in ((admin, Role.admin), (cashier, Role.cashier)):
-            link = (
-                db.query(UserStoreRole)
-                .filter(UserStoreRole.user_id == user.id, UserStoreRole.store_id == store.id)
-                .first()
-            )
-            if not link:
-                db.add(UserStoreRole(user_id=user.id, store_id=store.id, role=role))
+            for st in (store, store2):
+                link = (
+                    db.query(UserStoreRole)
+                    .filter(UserStoreRole.user_id == user.id, UserStoreRole.store_id == st.id)
+                    .first()
+                )
+                if not link:
+                    db.add(UserStoreRole(user_id=user.id, store_id=st.id, role=role))
 
         cat = db.query(Category).filter(Category.name == "Do uong").first()
         if not cat:
@@ -90,6 +97,13 @@ def seed(db: Session | None = None) -> dict:
             )
             if not stock:
                 db.add(StockLevel(store_id=store.id, product_id=p.id, qty=qty))
+            stock2 = (
+                db.query(StockLevel)
+                .filter(StockLevel.store_id == store2.id, StockLevel.product_id == p.id)
+                .first()
+            )
+            if not stock2:
+                db.add(StockLevel(store_id=store2.id, product_id=p.id, qty=max(qty // 2, 10)))
 
         cust = db.query(Customer).filter(Customer.phone == "0912345678").first()
         if not cust:

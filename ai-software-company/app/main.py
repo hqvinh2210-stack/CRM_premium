@@ -1,7 +1,11 @@
 from contextlib import asynccontextmanager
+import os
+from pathlib import Path
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from agents.roles import list_roles
@@ -11,31 +15,54 @@ from graph.graph import graph
 from memory.service import get_memory_service
 from pipeline.error_middleware import ProductionErrorMiddleware
 from pos.bootstrap import bootstrap_pos
+from pos.middleware_rate_limit import RateLimitMiddleware
 from pos.routers import api_router as pos_api_router
+from pos.services.outbox_worker import start_outbox_worker, stop_outbox_worker, worker_stats
+
+ROOT = Path(__file__).resolve().parent.parent
+WEB_DIST = ROOT / "web" / "dist"
+SERVE_WEB = os.getenv("SERVE_WEB", "0") == "1" and WEB_DIST.is_dir()
+
+
+def _cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "").strip()
+    if raw == "*":
+        return ["*"]
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+    ]
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     info = bootstrap_pos()
+    started = start_outbox_worker()
     print(f"[pos] DB ready. Demo login: {info['admin_email']} / {info['admin_password']}")
     print(f"[pos] store_id={info['store_id']}")
+    print(f"[pos] outbox worker started={started}")
+    print(f"[pos] serve_web={SERVE_WEB} dist={WEB_DIST}")
     yield
+    stop_outbox_worker()
 
 
-app = FastAPI(title="AI Software Company + POS CRM", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="AI Software Company + POS CRM", version="0.6.0", lifespan=lifespan)
+_origins = _cors_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:4173",
-    ],
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials=_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(ProductionErrorMiddleware)
+app.add_middleware(RateLimitMiddleware)
 app.include_router(pos_api_router)
 
 _last_linear_result: dict | None = None
@@ -65,14 +92,17 @@ class MemoryAddRequest(BaseModel):
     issue_id: str | None = None
 
 
-@app.get("/")
-async def root():
+@app.get("/api")
+async def api_root():
+    """JSON root when SPA occupies `/` in production (SERVE_WEB=1)."""
     return {
         "status": "running",
-        "product": "POS + CRM MVP (Phase 1) + AI agents",
+        "product": "POS + CRM (Phase 1–4) + AI agents",
+        "version": "0.6.0",
         "agents": "memory → planner(Ava) → coder(Rex) → reviewer(Kai)",
         "pos_api": "/api/v1/*",
         "docs": "/docs",
+        "ui": "/" if SERVE_WEB else "http://127.0.0.1:5173",
         "endpoints": {
             "health": "GET /health",
             "pos_login": "POST /api/v1/auth/login",
@@ -86,6 +116,15 @@ async def root():
     }
 
 
+@app.get("/")
+async def root():
+    if SERVE_WEB:
+        index = WEB_DIST / "index.html"
+        if index.is_file():
+            return FileResponse(index)
+    return await api_root()
+
+
 @app.get("/health")
 async def health():
     settings = get_settings()
@@ -93,7 +132,11 @@ async def health():
     return {
         "ok": True,
         "graph": "memory → planner → coding → review",
-        "pos": "phase1-mvp",
+        "pos": "phase1-4-full",
+        "version": "0.6.0",
+        "db_backend": __import__("pos.db", fromlist=["db_backend"]).db_backend(),
+        "outbox_worker": worker_stats(),
+        "celery_enabled": __import__("os").getenv("CELERY_ENABLED", "0") == "1",
         "llm_enabled": settings.llm_enabled,
         "model": settings.xai_model if settings.llm_enabled else None,
         "mode": "llm" if settings.llm_enabled else "offline",
@@ -215,3 +258,41 @@ async def linear_last():
     if _last_linear_result is None:
         return {"ok": True, "result": None, "message": "no Linear issue handled yet"}
     return {"ok": True, "result": _last_linear_result}
+
+
+# ---- Production SPA (React build in web/dist) ----
+if SERVE_WEB:
+    assets = WEB_DIST / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets)), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str, request: Request):
+        """Serve static files or index.html for client-side routes."""
+        # Never swallow API / docs / health
+        blocked = (
+            "api/",
+            "docs",
+            "redoc",
+            "openapi.json",
+            "health",
+            "run",
+            "memory",
+            "linear",
+            "agents",
+            "pipeline",
+        )
+        if full_path == "api" or any(
+            full_path == b or full_path.startswith(b if b.endswith("/") else b + "/")
+            or full_path.startswith(b)
+            for b in blocked
+        ):
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+        candidate = WEB_DIST / full_path
+        if candidate.is_file() and candidate.resolve().is_relative_to(WEB_DIST.resolve()):
+            return FileResponse(candidate)
+        index = WEB_DIST / "index.html"
+        if index.is_file():
+            return FileResponse(index)
+        return JSONResponse({"detail": "SPA not built"}, status_code=404)

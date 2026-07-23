@@ -95,12 +95,16 @@ def stage_review() -> StageResult:
             {"missing": missing},
         )
 
-    # lightweight review of pay path
+    # lightweight review of pay + refund path
     pay_src = (ROOT / "pos" / "services" / "orders.py").read_text(encoding="utf-8")
+    events_src = (ROOT / "pos" / "services" / "events.py").read_text(encoding="utf-8")
     checks = {
         "has_atomic_pay": "def atomic_pay" in pay_src,
         "decrements_stock": "stock.qty -=" in pay_src or "stock.qty-=" in pay_src,
         "status_paid": "OrderStatus.paid" in pay_src,
+        "has_atomic_refund": "def atomic_refund" in pay_src,
+        "restores_stock": "stock.qty +=" in pay_src or "stock.qty+=" in pay_src,
+        "outbox_dead_letter": "dead_letter" in events_src,
     }
     ok = all(checks.values())
     msg = "Review checks passed" if ok else f"Review failed: {checks}"
@@ -140,7 +144,7 @@ def stage_deploy(mode: str = "local") -> StageResult:
             "deployed_at": datetime.now(UTC).isoformat(),
             "mode": mode,
             "git_sha": _git_sha(),
-            "version": "0.4.0",
+            "version": "0.6.0",
         }
         (data / "deploy.json").write_text(json.dumps(marker, indent=2), encoding="utf-8")
 

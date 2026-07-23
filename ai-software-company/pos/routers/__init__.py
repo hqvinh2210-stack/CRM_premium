@@ -6,12 +6,14 @@ from pos.routers import (
     catalog,
     customers,
     events,
+    integrations,
     inventory,
     loyalty,
     orders,
     payments,
     promotions,
     reports,
+    tasks,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -27,3 +29,5 @@ api_router.include_router(promotions.router)
 api_router.include_router(ai_pos.router)
 api_router.include_router(payments.router)
 api_router.include_router(events.router)
+api_router.include_router(tasks.router)
+api_router.include_router(integrations.router)

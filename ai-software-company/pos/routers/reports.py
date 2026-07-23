@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import csv
+import io
 from datetime import date, datetime, time
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -129,3 +132,198 @@ def daily_sales(
         "by_payment_method": {k: str(v) for k, v in by_method.items()},
         "top_products": top_products,
     }
+
+
+@router.get("/analytics")
+def analytics_dashboard(
+    days: int = Query(default=7, ge=1, le=90),
+    ctx: AuthContext = Depends(require_any("manager", "admin")),
+    db: Session = Depends(get_db),
+):
+    """
+    Multi-day analytics: revenue by day, by hour (today), top products, simple CLV proxy.
+    """
+    from datetime import timedelta
+
+    today = date.today()
+    start_day = today - timedelta(days=days - 1)
+    start_dt = datetime.combine(start_day, time.min)
+    end_dt = datetime.combine(today, time.max)
+
+    orders = (
+        db.query(Order)
+        .filter(
+            Order.store_id == ctx.store_id,
+            Order.status == OrderStatus.paid,
+            Order.paid_at >= start_dt,
+            Order.paid_at <= end_dt,
+        )
+        .all()
+    )
+
+    by_day: dict[str, dict] = {}
+    by_hour: dict[int, Decimal] = {h: Decimal("0") for h in range(24)}
+    for o in orders:
+        if not o.paid_at:
+            continue
+        dkey = o.paid_at.date().isoformat() if hasattr(o.paid_at, "date") else str(o.paid_at)[:10]
+        slot = by_day.setdefault(dkey, {"order_count": 0, "revenue": Decimal("0")})
+        slot["order_count"] += 1
+        slot["revenue"] += o.total
+        if o.paid_at.date() == today:
+            by_hour[o.paid_at.hour] = by_hour.get(o.paid_at.hour, Decimal("0")) + o.total
+
+    # fill missing days
+    day_series = []
+    for i in range(days):
+        d = (start_day + timedelta(days=i)).isoformat()
+        slot = by_day.get(d, {"order_count": 0, "revenue": Decimal("0")})
+        day_series.append(
+            {
+                "date": d,
+                "order_count": slot["order_count"],
+                "revenue": str(slot["revenue"]),
+            }
+        )
+
+    top_rows = (
+        db.query(
+            OrderLine.product_name,
+            func.sum(OrderLine.qty).label("qty"),
+            func.sum(OrderLine.line_total).label("revenue"),
+        )
+        .join(Order, Order.id == OrderLine.order_id)
+        .filter(
+            Order.store_id == ctx.store_id,
+            Order.status == OrderStatus.paid,
+            Order.paid_at >= start_dt,
+            Order.paid_at <= end_dt,
+        )
+        .group_by(OrderLine.product_name)
+        .order_by(func.sum(OrderLine.line_total).desc())
+        .limit(10)
+        .all()
+    )
+
+    # CLV proxy: avg lifetime spend of customers with paid orders in window
+    cust_spend: dict[str, Decimal] = {}
+    for o in orders:
+        if not o.customer_id:
+            continue
+        cust_spend[o.customer_id] = cust_spend.get(o.customer_id, Decimal("0")) + o.total
+    clv_avg = (
+        (sum(cust_spend.values(), Decimal("0")) / len(cust_spend)).quantize(Decimal("0.01"))
+        if cust_spend
+        else Decimal("0")
+    )
+
+    total_revenue = sum((o.total for o in orders), Decimal("0"))
+    return {
+        "store_id": ctx.store_id,
+        "days": days,
+        "from": start_day.isoformat(),
+        "to": today.isoformat(),
+        "totals": {
+            "order_count": len(orders),
+            "revenue": str(total_revenue),
+            "customers": len(cust_spend),
+            "avg_order_value": str(
+                (total_revenue / len(orders)).quantize(Decimal("0.01")) if orders else Decimal("0")
+            ),
+            "clv_proxy_avg": str(clv_avg),
+        },
+        "by_day": day_series,
+        "by_hour_today": [{"hour": h, "revenue": str(by_hour[h])} for h in range(24)],
+        "top_products": [
+            {
+                "name": r.product_name,
+                "qty": int(r.qty or 0),
+                "revenue": str(r.revenue or 0),
+            }
+            for r in top_rows
+        ],
+    }
+
+
+@router.get("/export.csv")
+def export_sales_csv(
+    days: int = Query(default=7, ge=1, le=90),
+    ctx: AuthContext = Depends(require_any("manager", "admin")),
+    db: Session = Depends(get_db),
+):
+    """Export paid orders as CSV (P4-M6 Excel-compatible)."""
+    from datetime import timedelta
+
+    today = date.today()
+    start_day = today - timedelta(days=days - 1)
+    start_dt = datetime.combine(start_day, time.min)
+    end_dt = datetime.combine(today, time.max)
+    orders = (
+        db.query(Order)
+        .filter(
+            Order.store_id == ctx.store_id,
+            Order.status == OrderStatus.paid,
+            Order.paid_at >= start_dt,
+            Order.paid_at <= end_dt,
+        )
+        .order_by(Order.paid_at.asc())
+        .all()
+    )
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["order_id", "paid_at", "customer_id", "subtotal", "discount", "total", "status"])
+    for o in orders:
+        w.writerow(
+            [
+                o.id,
+                o.paid_at.isoformat() if o.paid_at else "",
+                o.customer_id or "",
+                str(o.subtotal),
+                str(o.discount),
+                str(o.total),
+                o.status.value,
+            ]
+        )
+    data = buf.getvalue().encode("utf-8-sig")
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="sales_{days}d.csv"'},
+    )
+
+
+@router.get("/export.txt")
+def export_sales_txt(
+    report_date: date | None = Query(default=None, alias="date"),
+    ctx: AuthContext = Depends(require_any("manager", "admin", "cashier")),
+    db: Session = Depends(get_db),
+):
+    """Printable end-of-day text report (PDF-ready plain text)."""
+    day = report_date or date.today()
+    start = datetime.combine(day, time.min)
+    end = datetime.combine(day, time.max)
+    orders = (
+        db.query(Order)
+        .filter(
+            Order.store_id == ctx.store_id,
+            Order.status == OrderStatus.paid,
+            Order.paid_at >= start,
+            Order.paid_at <= end,
+        )
+        .all()
+    )
+    net = sum((o.total for o in orders), Decimal("0"))
+    lines = [
+        "===== BAO CAO CUOI NGAY =====",
+        f"Ngay: {day.isoformat()}",
+        f"Store: {ctx.store_id}",
+        f"So don: {len(orders)}",
+        f"Doanh thu net: {net}",
+        "----------------------------",
+    ]
+    for o in orders[:100]:
+        lines.append(f"{(o.paid_at or o.created_at)} | {o.id[:8]} | {o.total}")
+    lines.append("============================")
+    return PlainTextResponse("\n".join(lines), media_type="text/plain; charset=utf-8")
+
+
