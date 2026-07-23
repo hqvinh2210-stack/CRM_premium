@@ -1,0 +1,122 @@
+[
+  {
+    "title": "[P1-M1-T1] DB schema: users, stores, user_store_roles, refresh_tokens",
+    "priority": 2,
+    "labels": ["phase-1", "module:auth", "type:feature", "area:backend"],
+    "description": "## Goal\nFoundation multi-store + multi-user cho POS.\n\n## Acceptance criteria\n- [ ] Migration: users, stores, user_store_roles, refresh_tokens\n- [ ] Role enum: cashier | manager | admin\n- [ ] Seed 1 admin + 1 store demo\n\n## Schema\n- users: id, email, phone, password_hash, is_active, created_at\n- stores: id, code, name, address, timezone, is_active\n- user_store_roles: user_id, store_id, role\n- refresh_tokens: id, user_id, token_hash, expires_at, revoked\n\n## Tests\n- [ ] migration up/down\n- [ ] seed loads\n\n## Agent handoff\nAva plan tables; Rex models+migration; Kai indexes & uniques."
+  },
+  {
+    "title": "[P1-M1-T2] Auth API: login, refresh, me",
+    "priority": 2,
+    "labels": ["phase-1", "module:auth", "type:feature", "area:backend"],
+    "description": "## Goal\nJWT access + refresh login.\n\n## Acceptance criteria\n- [ ] POST /auth/login\n- [ ] POST /auth/refresh\n- [ ] GET /auth/me\n- [ ] Password hashed\n\n## Business rules\nAccess 15m, refresh 7d; generic fail message.\n\n## Tests\n- [ ] happy path\n- [ ] wrong password 401"
+  },
+  {
+    "title": "[P1-M1-T3] RBAC middleware require_role + store scope",
+    "priority": 2,
+    "labels": ["phase-1", "module:auth", "type:feature", "area:backend"],
+    "description": "## Goal\nEnforce role + store on all POS APIs.\n\n## Acceptance criteria\n- [ ] require_roles dependency\n- [ ] X-Store-Id membership check\n- [ ] 403 cross-store\n\n## Tests\n- [ ] cashier denied admin\n- [ ] cross-store blocked"
+  },
+  {
+    "title": "[P1-M1-T4] Frontend: Login + Store selector",
+    "priority": 3,
+    "labels": ["phase-1", "module:auth", "type:feature", "area:frontend"],
+    "description": "## Goal\nTouch-friendly login + store select.\n\n## Acceptance criteria\n- [ ] Login form\n- [ ] Store list\n- [ ] Token persist\n- [ ] Enter POS shell"
+  },
+  {
+    "title": "[P1-M2-T1] DB schema: categories, products, stock_levels",
+    "priority": 2,
+    "labels": ["phase-1", "module:catalog", "type:feature", "area:backend"],
+    "description": "## Goal\nCatalog + stock per store.\n\n## Acceptance criteria\n- [ ] products with sku, price, barcode, track_inventory, soft-delete\n- [ ] stock_levels(store_id, product_id, qty, version)\n- [ ] unique sku; unique barcode nullable"
+  },
+  {
+    "title": "[P1-M2-T2] Product CRUD + search + barcode lookup API",
+    "priority": 2,
+    "labels": ["phase-1", "module:catalog", "type:feature", "area:backend"],
+    "description": "## Goal\nProduct APIs for POS grid.\n\n## API\nCRUD /products, GET /products/search, GET /products/barcode/{code}\n\n## Acceptance criteria\n- [ ] soft-delete\n- [ ] search name/sku/barcode\n- [ ] pagination"
+  },
+  {
+    "title": "[P1-M2-T3] Stock adjust API with reason",
+    "priority": 3,
+    "labels": ["phase-1", "module:catalog", "type:feature", "area:backend"],
+    "description": "## Goal\nAdjust stock with audit reason + optimistic lock.\n\n## API\nPOST /stock/adjust\n\n## Tests\n- [ ] version conflict\n- [ ] negative stock policy"
+  },
+  {
+    "title": "[P1-M2-T4] Frontend Product grid + barcode input",
+    "priority": 3,
+    "labels": ["phase-1", "module:catalog", "type:feature", "area:frontend"],
+    "description": "## Goal\nTouch product grid + barcode add to cart.\n\n## Acceptance criteria\n- [ ] large touch cards\n- [ ] search + barcode enter\n- [ ] low-stock badge"
+  },
+  {
+    "title": "[P1-M3-T1] DB schema: orders, order_lines, payments",
+    "priority": 1,
+    "labels": ["phase-1", "module:orders", "type:feature", "area:backend"],
+    "description": "## Goal\nPOS transaction model.\n\n## Schema\norders status draft|held|paid|void|refunded; order_lines; payments method cash|card|ewallet\n\n## Tests\n- [ ] FK + total >= 0"
+  },
+  {
+    "title": "[P1-M3-T2] Cart API: draft, lines, hold/resume",
+    "priority": 1,
+    "labels": ["phase-1", "module:orders", "type:feature", "area:backend"],
+    "description": "## Goal\nServer-side cart.\n\n## API\nPOST /orders, lines CRUD, hold, resume\n\n## Rules\nOnly draft/held editable; server recalculates totals."
+  },
+  {
+    "title": "[P1-M3-T3] Atomic pay: payment + stock decrement + paid",
+    "priority": 1,
+    "labels": ["phase-1", "module:orders", "type:feature", "area:backend"],
+    "description": "## Goal\nSafe checkout money + inventory.\n\n## API\nPOST /orders/{id}/pay + Idempotency-Key\n\n## Business rules\nSingle DB transaction; decrement stock; idempotent; reject double pay.\n\n## Tests\n- [ ] concurrent double-pay\n- [ ] stock race\n- [ ] idempotency replay"
+  },
+  {
+    "title": "[P1-M3-T4] Frontend Cart sidebar + checkout",
+    "priority": 2,
+    "labels": ["phase-1", "module:orders", "type:feature", "area:frontend"],
+    "description": "## Goal\nCart UI qty, discount%, note, pay cash.\n\n## Acceptance criteria\n- [ ] add from grid\n- [ ] +/- qty\n- [ ] discount\n- [ ] pay success state"
+  },
+  {
+    "title": "[P1-M3-T5] Offline queue stub IndexedDB sync",
+    "priority": 3,
+    "labels": ["phase-1", "module:orders", "type:feature", "area:frontend"],
+    "description": "## Goal\nOffline draft queue MVP.\n\n## Acceptance criteria\n- [ ] save when offline\n- [ ] POST /orders/sync\n- [ ] fail missing product gracefully"
+  },
+  {
+    "title": "[P1-M4-T1] DB schema: customers, customer_addresses",
+    "priority": 2,
+    "labels": ["phase-1", "module:customers", "type:feature", "area:backend"],
+    "description": "## Goal\nCRM identity core.\n\n## Schema\ncustomers phone unique, name, email, tags jsonb, notes; addresses"
+  },
+  {
+    "title": "[P1-M4-T2] Customer search/create + order history API",
+    "priority": 2,
+    "labels": ["phase-1", "module:customers", "type:feature", "area:backend"],
+    "description": "## API\nGET /customers/search, POST/PATCH customers, GET /customers/{id}/orders\n\n## Rules\nVN phone normalize; optional auto-create on checkout"
+  },
+  {
+    "title": "[P1-M4-T3] POS modal find/add customer",
+    "priority": 2,
+    "labels": ["phase-1", "module:customers", "type:feature", "area:frontend"],
+    "description": "## Goal\nAttach customer to cart on POS.\n\n## Acceptance criteria\n- [ ] search phone\n- [ ] create if missing\n- [ ] attach to order"
+  },
+  {
+    "title": "[P1-M4-T4] Customer purchase history tab",
+    "priority": 3,
+    "labels": ["phase-1", "module:customers", "type:feature", "area:frontend"],
+    "description": "## Goal\nShow last 10 orders for customer on POS/CRM panel."
+  },
+  {
+    "title": "[P1-M5-T1] Receipt template text/PDF",
+    "priority": 3,
+    "labels": ["phase-1", "module:orders", "type:feature", "area:backend"],
+    "description": "## Goal\nGET /orders/{id}/receipt ESC-POS text + optional PDF"
+  },
+  {
+    "title": "[P1-M5-T2] Daily sales report API",
+    "priority": 3,
+    "labels": ["phase-1", "module:analytics", "type:feature", "area:backend"],
+    "description": "## API\nGET /reports/daily-sales?store_id=&date=\n\nReturns gross, net, count, by payment method, top products"
+  },
+  {
+    "title": "[P1-M5-T3] End-of-day summary UI",
+    "priority": 4,
+    "labels": ["phase-1", "module:analytics", "type:feature", "area:frontend"],
+    "description": "## Goal\nManager EOD screen + print"
+  }
+]

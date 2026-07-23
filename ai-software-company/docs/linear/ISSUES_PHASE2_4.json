@@ -1,0 +1,40 @@
+{
+  "phase2": [
+    {"title": "[P2-M1-T1] Loyalty schema: programs, points, transactions, rewards", "priority": 2, "labels": ["phase-2", "module:loyalty", "type:feature", "area:backend"]},
+    {"title": "[P2-M1-T2] Earn/redeem points on checkout", "priority": 2, "labels": ["phase-2", "module:loyalty", "type:feature", "area:backend"]},
+    {"title": "[P2-M1-T3] POS UI points balance + redeem suggestion", "priority": 3, "labels": ["phase-2", "module:loyalty", "type:feature", "area:frontend"]},
+    {"title": "[P2-M1-T4] Points expiry job", "priority": 4, "labels": ["phase-2", "module:loyalty", "type:feature", "area:backend"]},
+    {"title": "[P2-M2-T1] Inter-store stock transfer", "priority": 2, "labels": ["phase-2", "module:inventory", "type:feature", "area:backend"]},
+    {"title": "[P2-M2-T2] Stocktake session + variance", "priority": 3, "labels": ["phase-2", "module:inventory", "type:feature", "area:backend"]},
+    {"title": "[P2-M2-T3] Low-stock alerts", "priority": 3, "labels": ["phase-2", "module:inventory", "type:feature", "area:backend"]},
+    {"title": "[P2-M3-T1] Promotions schema", "priority": 2, "labels": ["phase-2", "module:promo", "type:feature", "area:backend"]},
+    {"title": "[P2-M3-T2] Promotion rule engine", "priority": 2, "labels": ["phase-2", "module:promo", "type:feature", "area:backend"]},
+    {"title": "[P2-M3-T3] Apply promo on cart UI", "priority": 3, "labels": ["phase-2", "module:promo", "type:feature", "area:frontend"]}
+  ],
+  "phase3": [
+    {"title": "[P3-M1-T1] Outbox events table + publisher", "priority": 2, "labels": ["phase-3", "module:events", "type:feature", "area:backend"]},
+    {"title": "[P3-M1-T2] Celery/Redis workers order.created", "priority": 2, "labels": ["phase-3", "module:events", "type:feature", "area:backend"]},
+    {"title": "[P3-M1-T3] Retry + dead-letter queue", "priority": 3, "labels": ["phase-3", "module:events", "type:feature", "area:backend"]},
+    {"title": "[P3-M2-T1] RFM segmentation job", "priority": 3, "labels": ["phase-3", "module:customers", "type:feature", "area:backend"]},
+    {"title": "[P3-M2-T2] Customer timeline API", "priority": 3, "labels": ["phase-3", "module:customers", "type:feature", "area:backend"]},
+    {"title": "[P3-M2-T3] Follow-up tasks CRM UI", "priority": 4, "labels": ["phase-3", "module:customers", "type:feature", "area:frontend"]},
+    {"title": "[P3-M3-T1] Sales aggregate tables/views", "priority": 2, "labels": ["phase-3", "module:analytics", "type:feature", "area:backend"]},
+    {"title": "[P3-M3-T2] Analytics dashboard API", "priority": 3, "labels": ["phase-3", "module:analytics", "type:feature", "area:backend"]},
+    {"title": "[P3-M3-T3] Charts dashboard UI", "priority": 3, "labels": ["phase-3", "module:analytics", "type:feature", "area:frontend"]},
+    {"title": "[P3-M4-T1] Co-purchase feature extract", "priority": 3, "labels": ["phase-3", "module:ai", "type:feature", "area:backend"]},
+    {"title": "[P3-M4-T2] Recommend products API", "priority": 2, "labels": ["phase-3", "module:ai", "type:feature", "area:backend"]},
+    {"title": "[P3-M4-T3] POS next-best-action coach panel", "priority": 3, "labels": ["phase-3", "module:ai", "type:feature", "area:frontend"]},
+    {"title": "[P3-M4-T4] Wire LangGraph agents to POS events", "priority": 3, "labels": ["phase-3", "module:ai", "type:feature", "area:backend"]},
+    {"title": "[P3-M5-T1] VNPay/MoMo sandbox adapter", "priority": 2, "labels": ["phase-3", "module:payments", "type:feature", "area:backend"]},
+    {"title": "[P3-M5-T2] E-invoice stub", "priority": 4, "labels": ["phase-3", "module:payments", "type:feature", "area:backend"]},
+    {"title": "[P3-M5-T3] Zalo/SMS notify on order", "priority": 4, "labels": ["phase-3", "module:customers", "type:feature", "area:backend"]}
+  ],
+  "phase4": [
+    {"title": "[P4-M1-T1] Offline conflict resolution", "priority": 2, "labels": ["phase-4", "module:orders", "type:feature", "area:frontend"]},
+    {"title": "[P4-M2-T1] i18n VI/EN", "priority": 3, "labels": ["phase-4", "module:ops", "type:feature", "area:frontend"]},
+    {"title": "[P4-M3-T1] Audit log + rate limit", "priority": 2, "labels": ["phase-4", "module:ops", "type:feature", "area:backend"]},
+    {"title": "[P4-M4-T1] Sentry + CI/CD pipeline", "priority": 2, "labels": ["phase-4", "module:ops", "type:chore", "area:backend"]},
+    {"title": "[P4-M5-T1] SoftPOS PWA mode", "priority": 2, "labels": ["phase-4", "module:ops", "type:feature", "area:frontend"]},
+    {"title": "[P4-M6-T1] Export Excel/PDF reports", "priority": 3, "labels": ["phase-4", "module:analytics", "type:feature", "area:backend"]}
+  ]
+}

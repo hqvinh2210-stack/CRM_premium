@@ -1,0 +1,41 @@
+name: CI — Review → Test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-software-company
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Review stage
+        run: uv run python -m pipeline run --from review --stop-after review --skip-monitor --no-linear
+
+      - name: Test stage
+        run: uv run python -m pytest tests/ -q --tb=line
+        env:
+          AGENT_FORCE_OFFLINE: "1"
+          MEM0_USE_REMOTE: "0"
+          ALLOW_OFFLINE_AGENTS: "1"
+
+      - name: Deploy smoke (import)
+        run: uv run python -m pipeline run --from deploy --stop-after deploy --skip-monitor --no-linear

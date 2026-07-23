@@ -1,5 +1,6 @@
 ﻿# Python
 .venv/
+**/.venv/
 **/__pycache__/
 **/*.py[cod]
 *.egg-info/
@@ -11,6 +12,19 @@ build/
 # Env / secrets
 .env
 **/.env
+**/.env.*
+!**/.env.example
+
+# Local data
+**/.data/
+**/.mem0/
+**/*.db
+**/_test_*.db
+**/_session_*.db
+
+# Node
+**/node_modules/
+**/dist/
 
 # IDE / OS
 .idea/
@@ -18,5 +32,6 @@ build/
 .DS_Store
 Thumbs.db
 
-# uv / local
+# uv / logs
 *.log
+uv.lock.bak

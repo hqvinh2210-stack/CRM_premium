@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+:root {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #0f172a;
+  background: #0b1220;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #0b1220;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
