@@ -76,15 +76,71 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="AI Software Company + POS CRM", version="0.7.0", lifespan=lifespan)
 _origins = _cors_origins()
+# Explicit Pages + local origins (avoids browser quirks with bare "*")
+_DEFAULT_EXTRA = [
+    "https://hqvinh2210-stack.github.io",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8001",
+    "http://127.0.0.1:8001",
+]
+if _origins == ["*"]:
+    # With credentials=false, * is fine; also list known origins for PNA + debugging
+    _cors_list = ["*"]
+else:
+    _cors_list = list(dict.fromkeys(_origins + _DEFAULT_EXTRA))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
-    allow_credentials=_origins != ["*"],
+    allow_origins=_cors_list,
+    allow_credentials=_cors_list != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 app.add_middleware(ProductionErrorMiddleware)
 app.add_middleware(RateLimitMiddleware)
+
+
+@app.middleware("http")
+async def private_network_and_cors_fix(request: Request, call_next):
+    """
+    Chrome Private Network Access: public HTTPS (GitHub Pages) → localhost API.
+    Preflight sends Access-Control-Request-Private-Network: true.
+    """
+    if request.method == "OPTIONS" and request.headers.get(
+        "access-control-request-private-network"
+    ):
+        origin = request.headers.get("origin", "*")
+        return JSONResponse(
+            content={},
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": origin if origin else "*",
+                "Access-Control-Allow-Methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT",
+                "Access-Control-Allow-Headers": request.headers.get(
+                    "access-control-request-headers", "*"
+                ),
+                "Access-Control-Allow-Private-Network": "true",
+                "Access-Control-Max-Age": "600",
+                "Vary": "Origin",
+            },
+        )
+
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    # Ensure CORS on error responses too when * is configured
+    origin = request.headers.get("origin")
+    if origin and "access-control-allow-origin" not in {
+        k.lower() for k in response.headers.keys()
+    }:
+        if _cors_list == ["*"] or origin in _cors_list:
+            response.headers["Access-Control-Allow-Origin"] = (
+                "*" if _cors_list == ["*"] else origin
+            )
+    return response
+
+
 app.include_router(pos_api_router)
 
 _last_linear_result: dict | None = None

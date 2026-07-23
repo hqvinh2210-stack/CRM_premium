@@ -6,8 +6,13 @@ export function LoginPage() {
   const login = useAuth((s) => s.login)
   const [email, setEmail] = useState('cashier@example.com')
   const [password, setPassword] = useState('cashier123')
-  const [apiBase, setApiBaseInput] = useState(() => getApiBase() || 'http://127.0.0.1:8001')
-  const [showApi, setShowApi] = useState(() => !getApiBase() && import.meta.env.PROD)
+  const [apiBase, setApiBaseInput] = useState(
+    () => getApiBase() || (import.meta.env.VITE_API_BASE as string) || 'http://127.0.0.1:8001',
+  )
+  // Always show API field on GitHub Pages / production static host
+  const [showApi, setShowApi] = useState(
+    () => import.meta.env.PROD || !getApiBase() || window.location.hostname.includes('github.io'),
+  )
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 

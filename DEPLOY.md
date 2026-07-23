@@ -127,9 +127,21 @@ CORS_ORIGINS=https://hqvinh2210-stack.github.io
 PUBLIC_BASE_URL=http://127.0.0.1:8001
 ```
 
-Trên màn Login → **Hiện API server** → gõ `http://127.0.0.1:8001` (máy local) hoặc URL VPS public.
+Trên màn Login → **API base URL** (bắt buộc khi dùng GitHub Pages):
 
-> Ghi chú: trình duyệt trên điện thoại **không** gọi được `127.0.0.1` của máy dev — cần API public (tunnel/VPS).
+| Tình huống | API URL |
+|------------|---------|
+| UI + API cùng máy, **không** dùng Pages | `http://127.0.0.1:8001` |
+| UI trên **GitHub Pages (HTTPS)** | **Không dùng** `http://127.0.0.1` (Chrome chặn public→private + mixed content) |
+| Pages + API local | Cloudflare Tunnel HTTPS, ví dụ `https://xxxx.trycloudflare.com` |
+
+```powershell
+# Tunnel HTTPS trỏ API Docker :8001
+cloudflared tunnel --url http://127.0.0.1:8001
+# copy URL trycloudflare.com → dán vào Login → API base URL
+```
+
+> Điện thoại / máy khác cũng chỉ gọi được API **public HTTPS** (tunnel/VPS), không gọi `127.0.0.1` của máy dev.
 
 ## 6. Checklist production
 
